@@ -22,6 +22,8 @@ import { processCancellation, cancelEntireBooking } from "./services/cancellatio
 import { getWeatherForBooking } from "./services/weather-service";
 import { sendNotification, NotificationType } from "./services/notification-service";
 import { calendarService } from "./services/calendar-service";
+import { whatsappService } from "./services/whatsapp-service";
+import { teamSelectionService } from "./services/team-selection-service";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 
@@ -2291,6 +2293,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Team selection and WhatsApp integration routes
+  app.post("/api/bookings/:id/generate-teams", isAuthenticated, async (req, res) => {
+    try {
+      const bookingId = parseInt(req.params.id);
+      const booking = await storage.getBooking(bookingId);
+      
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      const user = req.user as any;
+      const team = await storage.getTeam(booking.teamId);
+      
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      
+      // Check permissions
+      if (team.ownerId !== user.id && !team.allowPlayerBookingManagement) {
+        return res.status(403).json({ 
+          message: "Not authorized to generate teams for this booking" 
+        });
+      }
+      
+      // Generate teams
+      const { teamA, teamB } = await teamSelectionService.generateBalancedTeams(bookingId);
+      
+      // Return the generated teams
+      res.json({ 
+        success: true,
+        teamA,
+        teamB,
+        message: "Teams have been generated and notifications sent to players"
+      });
+    } catch (error: any) {
+      console.error("Error generating teams:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.post("/api/bookings/:id/notify-whatsapp", isAuthenticated, async (req, res) => {
+    try {
+      const bookingId = parseInt(req.params.id);
+      const booking = await storage.getBooking(bookingId);
+      
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      const user = req.user as any;
+      const team = await storage.getTeam(booking.teamId);
+      
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      
+      // Check permissions
+      if (team.ownerId !== user.id && !team.allowPlayerBookingManagement) {
+        return res.status(403).json({ 
+          message: "Not authorized to send notifications for this booking" 
+        });
+      }
+      
+      // Send WhatsApp notification about the booking
+      const success = await whatsappService.notifyTeamAboutBooking(booking, user, team);
+      
+      if (success) {
+        res.json({ 
+          success: true,
+          message: "WhatsApp notification sent successfully" 
+        });
+      } else {
+        res.status(500).json({ 
+          success: false,
+          message: "Failed to send WhatsApp notification" 
+        });
+      }
+    } catch (error: any) {
+      console.error("Error sending WhatsApp notification:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  // Add a webhook for player booking confirmations to trigger WhatsApp notifications
+  app.post("/api/player-bookings/:id/notify", isAuthenticated, async (req, res) => {
+    try {
+      const playerBookingId = parseInt(req.params.id);
+      const playerBooking = await storage.getPlayerBooking(playerBookingId);
+      
+      if (!playerBooking) {
+        return res.status(404).json({ message: "Player booking not found" });
+      }
+      
+      const booking = await storage.getBooking(playerBooking.bookingId);
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      const player = await storage.getUser(playerBooking.playerId);
+      if (!player) {
+        return res.status(404).json({ message: "Player not found" });
+      }
+      
+      const team = await storage.getTeam(booking.teamId);
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      
+      // Send WhatsApp notification about the booking
+      const success = await whatsappService.notifyTeamAboutBooking(booking, player, team);
+      
+      if (success) {
+        res.json({ 
+          success: true,
+          message: "WhatsApp notification sent successfully" 
+        });
+      } else {
+        res.status(500).json({ 
+          success: false,
+          message: "Failed to send WhatsApp notification" 
+        });
+      }
+    } catch (error: any) {
+      console.error("Error sending player booking notification:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

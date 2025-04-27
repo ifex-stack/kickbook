@@ -52,10 +52,11 @@ export function CreateBookingModal({ isOpen, onClose, selectedDate = new Date() 
       }
       
       // Only include fields that are defined in the schema
+      // Important: Send dates as Date objects, not strings
       const bookingData = {
         ...data,
-        startTime: new Date(data.startTime).toISOString(),
-        endTime: new Date(data.endTime).toISOString(),
+        startTime: new Date(data.startTime),
+        endTime: new Date(data.endTime),
         availableSlots: data.totalSlots,
         status: "active", // Set the initial status as active
         teamId: userData.teamId,

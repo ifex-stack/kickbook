@@ -34,8 +34,8 @@ export default function BookingTest() {
         title: "Test Booking",
         location: "Test Location",
         format: "7-a-side",
-        startTime: new Date().toISOString(),
-        endTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2 hours later
+        startTime: new Date(), // Send as Date object, not string
+        endTime: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours later
         totalSlots: 14,
         availableSlots: 14,
         teamId: user.teamId,

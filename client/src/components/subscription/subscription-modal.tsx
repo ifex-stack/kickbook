@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -27,14 +27,27 @@ export function SubscriptionModal({ isOpen, onClose, currentPlan = "basic" }: Su
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [priceIds, setPriceIds] = useState<{pro: string, enterprise: string} | null>(null);
   
-  // These price IDs come from your Stripe dashboard
-  // You need to get these from your Stripe dashboard by creating products and prices
-  const STRIPE_PRICE_IDS = {
-    // Use actual price IDs from your Stripe dashboard for production
-    pro: "price_1OtEVDBfccWQRlJhvMb2KMNS", // Pro plan price ID
-    enterprise: "price_1OtEVjBfccWQRlJhkArbXtEF" // Enterprise plan price ID
-  };
+  // Load Stripe price IDs from the server
+  useEffect(() => {
+    if (isOpen) {
+      fetch('/api/stripe/prices')
+        .then(res => res.json())
+        .then(data => {
+          console.log('Fetched Stripe price IDs:', data);
+          setPriceIds(data);
+        })
+        .catch(err => {
+          console.error('Error fetching Stripe price IDs:', err);
+          toast({
+            title: "Error",
+            description: "Could not load subscription prices. Please try again.",
+            variant: "destructive",
+          });
+        });
+    }
+  }, [isOpen, toast]);
 
   // Handle subscription upgrade
   const handleSubscription = async (planName: string, priceId?: string) => {
@@ -114,10 +127,18 @@ export function SubscriptionModal({ isOpen, onClose, currentPlan = "basic" }: Su
       ],
       isPopular: true,
       isCurrent: currentPlan === "pro",
-      priceId: STRIPE_PRICE_IDS.pro,
+      priceId: priceIds?.pro,
       ctaText: currentPlan === "pro" ? "Current Plan" : "Upgrade to Pro",
       onSelect: () => {
-        handleSubscription("pro", STRIPE_PRICE_IDS.pro);
+        if (priceIds?.pro) {
+          handleSubscription("pro", priceIds.pro);
+        } else {
+          toast({
+            title: "Error",
+            description: "Could not load price information. Please try again.",
+            variant: "destructive",
+          });
+        }
       }
     },
     {
@@ -132,10 +153,18 @@ export function SubscriptionModal({ isOpen, onClose, currentPlan = "basic" }: Su
         "Priority support"
       ],
       isCurrent: currentPlan === "enterprise",
-      priceId: STRIPE_PRICE_IDS.enterprise,
+      priceId: priceIds?.enterprise,
       ctaText: currentPlan === "enterprise" ? "Current Plan" : "Upgrade to Enterprise",
       onSelect: () => {
-        handleSubscription("enterprise", STRIPE_PRICE_IDS.enterprise);
+        if (priceIds?.enterprise) {
+          handleSubscription("enterprise", priceIds.enterprise);
+        } else {
+          toast({
+            title: "Error",
+            description: "Could not load price information. Please try again.",
+            variant: "destructive",
+          });
+        }
       }
     }
   ];

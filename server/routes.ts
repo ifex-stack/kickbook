@@ -1319,6 +1319,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Initialize or retrieve Stripe price IDs
+  app.get("/api/stripe/prices", async (req, res) => {
+    try {
+      // First, check if we have products for our plans
+      const products = await stripe.products.list({ limit: 100 });
+      
+      let proProduct = products.data.find(p => p.name === "Pro Plan");
+      let enterpriseProduct = products.data.find(p => p.name === "Enterprise Plan");
+      
+      // Create products if they don't exist
+      if (!proProduct) {
+        proProduct = await stripe.products.create({
+          name: "Pro Plan",
+          description: "For competitive teams"
+        });
+      }
+      
+      if (!enterpriseProduct) {
+        enterpriseProduct = await stripe.products.create({
+          name: "Enterprise Plan",
+          description: "For clubs & leagues"
+        });
+      }
+      
+      // Get prices for these products
+      const prices = await stripe.prices.list({ limit: 100 });
+      
+      let proPrice = prices.data.find(p => p.product === proProduct.id && p.unit_amount === 2900);
+      let enterprisePrice = prices.data.find(p => p.product === enterpriseProduct.id && p.unit_amount === 9900);
+      
+      // Create prices if they don't exist
+      if (!proPrice) {
+        proPrice = await stripe.prices.create({
+          product: proProduct.id,
+          unit_amount: 2900, // $29.00
+          currency: 'usd',
+          recurring: { interval: 'month' }
+        });
+      }
+      
+      if (!enterprisePrice) {
+        enterprisePrice = await stripe.prices.create({
+          product: enterpriseProduct.id,
+          unit_amount: 9900, // $99.00
+          currency: 'usd',
+          recurring: { interval: 'month' }
+        });
+      }
+      
+      // Return the price IDs
+      res.json({
+        pro: proPrice.id,
+        enterprise: enterprisePrice.id
+      });
+    } catch (error: any) {
+      console.error("Error initializing Stripe prices:", error);
+      res.status(500).json({ message: "Error initializing Stripe prices: " + error.message });
+    }
+  });
+
   // Handle webhook events from Stripe
   app.post("/api/webhook", express.raw({ type: 'application/json' }), async (req, res) => {
     const sig = req.headers['stripe-signature'] as string;

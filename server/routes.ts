@@ -1604,6 +1604,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Achievement API endpoints
+  app.get('/api/achievements', async (req, res) => {
+    try {
+      const achievements = await storage.getAchievements();
+      res.json(achievements);
+    } catch (error) {
+      console.error('Error fetching achievements:', error);
+      res.status(500).json({ message: 'Failed to fetch achievements' });
+    }
+  });
+
+  app.get('/api/players/:id/achievements', requireAuth, async (req, res) => {
+    try {
+      const playerId = parseInt(req.params.id);
+      
+      // Optional security check to ensure users can only see their own achievements
+      // unless they are an admin
+      const user = req.user as any;
+      if (user.id !== playerId && user.role !== 'admin') {
+        return res.status(403).json({ message: 'Not authorized to view these achievements' });
+      }
+      
+      const playerAchievements = await storage.getPlayerAchievements(playerId);
+      res.json(playerAchievements);
+    } catch (error) {
+      console.error('Error fetching player achievements:', error);
+      res.status(500).json({ message: 'Failed to fetch player achievements' });
+    }
+  });
+
+  app.post('/api/players/:id/achievements/:achievementId', requireAuth, async (req, res) => {
+    try {
+      const playerId = parseInt(req.params.id);
+      const achievementId = parseInt(req.params.achievementId);
+      
+      // Only admins can manually assign achievements
+      const user = req.user as any;
+      if (user.role !== 'admin') {
+        return res.status(403).json({ message: 'Not authorized to assign achievements' });
+      }
+      
+      const success = await storage.addPlayerAchievement(playerId, achievementId);
+      
+      if (success) {
+        res.json({ success: true, message: 'Achievement assigned successfully' });
+      } else {
+        res.status(400).json({ message: 'Failed to assign achievement' });
+      }
+    } catch (error) {
+      console.error('Error assigning achievement:', error);
+      res.status(500).json({ message: 'Failed to assign achievement' });
+    }
+  });
+
   // Team Invitation API endpoints
   app.post('/api/teams/join', async (req, res) => {
     try {

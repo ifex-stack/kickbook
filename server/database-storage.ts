@@ -229,6 +229,19 @@ export class DatabaseStorage implements IStorage {
 
   async addPlayerAchievement(playerId: number, achievementId: number): Promise<boolean> {
     try {
+      // Check if player already has this achievement
+      const existingAchievements = await db.select()
+        .from(playerAchievements)
+        .where(and(
+          eq(playerAchievements.playerId, playerId),
+          eq(playerAchievements.achievementId, achievementId)
+        ));
+        
+      if (existingAchievements.length > 0) {
+        return false; // Already has this achievement
+      }
+      
+      // Add the achievement
       await db.insert(playerAchievements)
         .values({
           playerId,
@@ -239,6 +252,96 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error("Error adding player achievement:", error);
       return false;
+    }
+  }
+  
+  /**
+   * Check and award achievements based on player stats and performance
+   * This should be called after updating player stats
+   */
+  async checkPlayerAchievements(playerId: number): Promise<void> {
+    try {
+      // Get all player stats
+      const playerStats = await this.getPlayerStatsByPlayer(playerId);
+      if (!playerStats.length) return;
+      
+      // Calculate totals
+      const totalGoals = playerStats.reduce((sum, stat) => sum + (stat.goals || 0), 0);
+      const totalAssists = playerStats.reduce((sum, stat) => sum + (stat.assists || 0), 0);
+      const totalYellowCards = playerStats.reduce((sum, stat) => sum + (stat.yellowCards || 0), 0);
+      const totalRedCards = playerStats.reduce((sum, stat) => sum + (stat.redCards || 0), 0);
+      const totalMatches = playerStats.length;
+      
+      // Get all achievements
+      const allAchievements = await this.getAchievements();
+      
+      // First Goal achievement (ID 1)
+      if (totalGoals > 0) {
+        const firstGoalAchievement = allAchievements.find(a => a.title === "First Goal");
+        if (firstGoalAchievement) {
+          await this.addPlayerAchievement(playerId, firstGoalAchievement.id);
+        }
+      }
+      
+      // Goal Machine achievement (ID 2) - 10+ goals
+      if (totalGoals >= 10) {
+        const goalMachineAchievement = allAchievements.find(a => a.title === "Goal Machine");
+        if (goalMachineAchievement) {
+          await this.addPlayerAchievement(playerId, goalMachineAchievement.id);
+        }
+      }
+      
+      // Hat-trick Hero achievement (ID 3)
+      const hasHatTrick = playerStats.some(stat => (stat.goals || 0) >= 3);
+      if (hasHatTrick) {
+        const hatTrickAchievement = allAchievements.find(a => a.title === "Hat-trick Hero");
+        if (hatTrickAchievement) {
+          await this.addPlayerAchievement(playerId, hatTrickAchievement.id);
+        }
+      }
+      
+      // Playmaker achievement (ID 4) - 5+ assists
+      if (totalAssists >= 5) {
+        const playmakerAchievement = allAchievements.find(a => a.title === "Playmaker");
+        if (playmakerAchievement) {
+          await this.addPlayerAchievement(playerId, playmakerAchievement.id);
+        }
+      }
+      
+      // Team Player achievement (ID 5) - 10+ matches
+      if (totalMatches >= 10) {
+        const teamPlayerAchievement = allAchievements.find(a => a.title === "Team Player");
+        if (teamPlayerAchievement) {
+          await this.addPlayerAchievement(playerId, teamPlayerAchievement.id);
+        }
+      }
+      
+      // Check for match-specific achievements (e.g., clean sheets)
+      const bookingIds = playerStats.map(stat => stat.bookingId);
+      for (const bookingId of bookingIds) {
+        const matchStat = await this.getMatchStatsByBooking(bookingId);
+        if (matchStat) {
+          // Winner achievement (ID 6)
+          if (matchStat.isWin) {
+            const winnerAchievement = allAchievements.find(a => a.title === "Winner");
+            if (winnerAchievement) {
+              await this.addPlayerAchievement(playerId, winnerAchievement.id);
+            }
+          }
+          
+          // Clean Sheet achievement (ID 7) - for goalkeepers
+          const playerStat = playerStats.find(stat => stat.bookingId === bookingId);
+          if (playerStat && matchStat.opponentScore === 0) {
+            // Add a check here if the player is a goalkeeper
+            const cleanSheetAchievement = allAchievements.find(a => a.title === "Clean Sheet");
+            if (cleanSheetAchievement) {
+              await this.addPlayerAchievement(playerId, cleanSheetAchievement.id);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking player achievements:", error);
     }
   }
 

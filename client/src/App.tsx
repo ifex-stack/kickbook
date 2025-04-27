@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme";
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { Chatbot } from "@/components/chatbot/chatbot";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/auth/login";
 import Register from "@/pages/auth/register";
@@ -18,6 +19,10 @@ import Subscription from "@/pages/subscription";
 import Checkout from "@/pages/checkout";
 import Settings from "@/pages/settings";
 import More from "@/pages/more";
+import PrivacyPolicy from "@/pages/privacy-policy";
+import TermsOfService from "@/pages/terms-of-service";
+import GDPR from "@/pages/gdpr";
+import Credits from "@/pages/credits";
 
 function Router() {
   return (
@@ -38,10 +43,19 @@ function Router() {
         <Route path="/checkout" component={Checkout} />
         <Route path="/settings" component={Settings} />
         <Route path="/more" component={More} />
+        <Route path="/credits" component={Credits} />
+        
+        {/* Legal Pages */}
+        <Route path="/privacy-policy" component={PrivacyPolicy} />
+        <Route path="/terms-of-service" component={TermsOfService} />
+        <Route path="/gdpr" component={GDPR} />
         
         {/* Fallback to 404 */}
         <Route component={NotFound} />
       </Switch>
+      
+      {/* Global Chatbot - available on all pages */}
+      <Chatbot />
     </AuthProvider>
   );
 }

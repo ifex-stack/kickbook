@@ -32,7 +32,7 @@ interface CreateBookingModalProps {
 
 export function CreateBookingModal({ isOpen, onClose, selectedDate = new Date() }: CreateBookingModalProps) {
   const { toast } = useToast();
-  const [format, setFormat] = useState<string>("7-a-side");
+  const [matchFormat, setMatchFormat] = useState<string>("7-a-side");
   
   const defaultStartTime = new Date(selectedDate);
   defaultStartTime.setHours(18, 0, 0); // Default to 6:00 PM
@@ -63,7 +63,7 @@ export function CreateBookingModal({ isOpen, onClose, selectedDate = new Date() 
   }
   
   const handleFormatChange = (value: string) => {
-    setFormat(value);
+    setMatchFormat(value);
     setValue('format', value as "5-a-side" | "7-a-side" | "11-a-side");
     setValue('totalSlots', getDefaultSlots(value));
   };
@@ -131,7 +131,7 @@ export function CreateBookingModal({ isOpen, onClose, selectedDate = new Date() 
             <Label htmlFor="format">Format</Label>
             <Select 
               onValueChange={handleFormatChange}
-              defaultValue={format}
+              defaultValue={matchFormat}
             >
               <SelectTrigger id="format" className="w-full mt-1">
                 <SelectValue placeholder="Select format" />
@@ -179,7 +179,7 @@ export function CreateBookingModal({ isOpen, onClose, selectedDate = new Date() 
             />
             {errors.totalSlots && <p className="text-sm text-red-500 mt-1">{errors.totalSlots.message}</p>}
             <p className="text-xs text-gray-500 mt-1">
-              Recommended: {getDefaultSlots(format)} slots for {format}
+              Recommended: {getDefaultSlots(matchFormat)} slots for {matchFormat}
             </p>
           </div>
           

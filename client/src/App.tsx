@@ -8,6 +8,7 @@ import { AuthProvider } from "@/components/auth/auth-provider";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/auth/login";
 import Register from "@/pages/auth/register";
+import TeamInvitation from "@/pages/auth/team-invitation";
 import Dashboard from "@/pages/dashboard";
 import Bookings from "@/pages/bookings";
 import Team from "@/pages/team";
@@ -25,6 +26,7 @@ function Router() {
         {/* Auth routes */}
         <Route path="/login" component={Login} />
         <Route path="/register" component={Register} />
+        <Route path="/team-invitation" component={TeamInvitation} />
         
         {/* App routes */}
         <Route path="/" component={Dashboard} />

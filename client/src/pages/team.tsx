@@ -2,14 +2,17 @@ import { useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlayerList } from "@/components/team/player-list";
 import { AddPlayerModal } from "@/components/team/add-player-modal";
 import { PlayerDetailsModal } from "@/components/team/player-details-modal";
 import { EditPlayerModal } from "@/components/team/edit-player-modal";
 import { TeamStats } from "@/components/team/team-stats";
+import { TeamInvitation } from "@/components/team/team-invitation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useQuery } from "@tanstack/react-query";
 import { downloadCSV } from "@/lib/utils";
+import { UserPlusIcon, UsersIcon, FileDownIcon } from "lucide-react";
 
 export default function Team() {
   const { user } = useAuth();
@@ -27,6 +30,12 @@ export default function Team() {
   
   const { data: teamStats, isLoading: isLoadingStats } = useQuery({
     queryKey: [`/api/teams/${user?.teamId}/stats`],
+    queryFn: undefined, // Using the default query function from queryClient
+    enabled: !!user?.teamId,
+  });
+  
+  const { data: team, isLoading: isLoadingTeam } = useQuery({
+    queryKey: [`/api/teams/${user?.teamId}`],
     queryFn: undefined, // Using the default query function from queryClient
     enabled: !!user?.teamId,
   });
@@ -97,17 +106,53 @@ export default function Team() {
         totalGoals={stats.totalGoals}
       />
       
-      <PlayerList 
-        players={players}
-        onViewPlayer={(player) => {
-          setSelectedPlayer(player);
-          setShowPlayerDetails(true);
-        }}
-        onEditPlayer={(player) => {
-          setSelectedPlayer(player);
-          setShowEditPlayer(true);
-        }}
-      />
+      {user?.role === "admin" ? (
+        <Tabs defaultValue="roster" className="mt-6">
+          <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto">
+            <TabsTrigger value="roster" className="flex items-center justify-center">
+              <UsersIcon className="w-4 h-4 mr-2" />
+              Team Roster
+            </TabsTrigger>
+            <TabsTrigger value="invitations" className="flex items-center justify-center">
+              <UserPlusIcon className="w-4 h-4 mr-2" />
+              Invitations
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="roster" className="mt-4">
+            <PlayerList 
+              players={players}
+              onViewPlayer={(player) => {
+                setSelectedPlayer(player);
+                setShowPlayerDetails(true);
+              }}
+              onEditPlayer={(player) => {
+                setSelectedPlayer(player);
+                setShowEditPlayer(true);
+              }}
+            />
+          </TabsContent>
+          
+          <TabsContent value="invitations" className="mt-4">
+            <TeamInvitation 
+              teamId={user?.teamId || 0}
+              teamName={team?.name || "Your Team"}
+            />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <PlayerList 
+          players={players}
+          onViewPlayer={(player) => {
+            setSelectedPlayer(player);
+            setShowPlayerDetails(true);
+          }}
+          onEditPlayer={(player) => {
+            setSelectedPlayer(player);
+            setShowEditPlayer(true);
+          }}
+        />
+      )}
       
       {/* Modals */}
       {showAddPlayerModal && (

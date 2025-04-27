@@ -22,7 +22,7 @@ if (!process.env.STRIPE_SECRET_KEY) {
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: "2022-11-15", // Use a supported API version
+  apiVersion: "2023-10-16", // Use a supported API version
 });
 import MemoryStore from "memorystore";
 

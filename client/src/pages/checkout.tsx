@@ -144,7 +144,7 @@ export default function Checkout() {
         return {
           name: "Pro Plan",
           price: "$29/month",
-          description: "For serious teams"
+          description: "For competitive teams"
         };
       case "enterprise":
         return {

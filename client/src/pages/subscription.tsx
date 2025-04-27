@@ -50,14 +50,14 @@ export default function Subscription() {
     },
     pro: {
       name: "Pro",
-      description: "For serious teams",
+      description: "For competitive teams",
       price: "$29/month",
       features: [
         { name: "Unlimited players", included: true },
         { name: "Post-match stats tracking", included: true },
         { name: "Points & leaderboards", included: true },
         { name: "Simple fantasy league", included: true },
-        { name: "Phone & email support", included: true },
+        { name: "Premium email support", included: true },
         { name: "Multi-team management", included: false },
       ]
     },

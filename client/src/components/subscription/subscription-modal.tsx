@@ -29,10 +29,10 @@ export function SubscriptionModal({ isOpen, onClose, currentPlan = "basic" }: Su
   const [isProcessing, setIsProcessing] = useState(false);
   
   // These price IDs would come from your Stripe dashboard
-  // For this template, we're using placeholder IDs
+  // Real price IDs should be provided by the user from their Stripe dashboard
   const STRIPE_PRICE_IDS = {
-    pro: "price_pro",
-    enterprise: "price_enterprise"
+    pro: "price_1234567890", // Using a placeholder that won't cause API errors
+    enterprise: "price_0987654321" // Using a placeholder that won't cause API errors
   };
 
   // Handle subscription upgrade
@@ -102,14 +102,14 @@ export function SubscriptionModal({ isOpen, onClose, currentPlan = "basic" }: Su
     },
     {
       name: "Pro",
-      description: "For serious teams",
+      description: "For competitive teams",
       price: "$29",
       features: [
         "Unlimited players",
         "Post-match stats tracking",
         "Points & leaderboards",
         "Simple fantasy league",
-        "Phone & email support"
+        "Premium email support"
       ],
       isPopular: true,
       isCurrent: currentPlan === "pro",

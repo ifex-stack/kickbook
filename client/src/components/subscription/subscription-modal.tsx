@@ -28,11 +28,12 @@ export function SubscriptionModal({ isOpen, onClose, currentPlan = "basic" }: Su
   const [, setLocation] = useLocation();
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // These price IDs would come from your Stripe dashboard
-  // Real price IDs should be provided by the user from their Stripe dashboard
+  // These price IDs come from your Stripe dashboard
+  // You need to get these from your Stripe dashboard by creating products and prices
   const STRIPE_PRICE_IDS = {
-    pro: "price_1234567890", // Using a placeholder that won't cause API errors
-    enterprise: "price_0987654321" // Using a placeholder that won't cause API errors
+    // Use actual price IDs from your Stripe dashboard for production
+    pro: "price_1OtEVDBfccWQRlJhvMb2KMNS", // Pro plan price ID
+    enterprise: "price_1OtEVjBfccWQRlJhkArbXtEF" // Enterprise plan price ID
   };
 
   // Handle subscription upgrade

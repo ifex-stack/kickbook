@@ -1,35 +1,46 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { UsersIcon, KeyIcon, MailIcon, ShieldIcon } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Icons } from "@/components/ui/icons";
+import { Users } from "lucide-react";
 
 const invitationSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  username: z.string().min(4, "Username must be at least 4 characters"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  name: z.string().min(2, { message: "Name must be at least 2 characters" }),
+  email: z.string().email({ message: "Please enter a valid email address" }),
+  username: z.string()
+    .min(3, { message: "Username must be at least 3 characters" })
+    .regex(/^[a-zA-Z0-9_]+$/, {
+      message: "Username can only contain letters, numbers, and underscores",
+    }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
   confirmPassword: z.string()
-}).refine(data => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"]
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
 });
 
 type InvitationFormData = z.infer<typeof invitationSchema>;
 
 export default function TeamInvitation() {
   const [, setLocation] = useLocation();
+  const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(true);
+  const [teamData, setTeamData] = useState<{ teamId: number; teamName: string } | null>(null);
   const { toast } = useToast();
-  const [teamInfo, setTeamInfo] = useState<{id: number, name: string} | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  
+  const [code] = useState(() => {
+    // Get invitation code from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get("code");
+  });
+
   const form = useForm<InvitationFormData>({
     resolver: zodResolver(invitationSchema),
     defaultValues: {
@@ -37,230 +48,208 @@ export default function TeamInvitation() {
       email: "",
       username: "",
       password: "",
-      confirmPassword: ""
-    }
+      confirmPassword: "",
+    },
   });
-  
-  // Extract team ID and name from URL parameters
+
+  // Verify invitation code
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const teamId = params.get("teamId");
-    const teamName = params.get("teamName");
-    
-    if (teamId && teamName) {
-      setTeamInfo({
-        id: parseInt(teamId),
-        name: decodeURIComponent(teamName)
+    if (!code) {
+      setVerifying(false);
+      toast({
+        title: "Invalid Invitation",
+        description: "No invitation code provided",
+        variant: "destructive",
       });
-    } else {
-      // If no team info in URL, redirect to regular registration
-      setLocation("/auth/register");
+      return;
     }
-  }, [setLocation]);
-  
-  const onSubmit = async (data: InvitationFormData) => {
-    if (!teamInfo) return;
-    
-    setIsLoading(true);
-    
-    try {
-      const result = await apiRequest("POST", "/api/auth/register-with-team", {
-        name: data.name,
-        email: data.email,
-        username: data.username,
-        password: data.password,
-        teamId: teamInfo.id
-      });
-      
-      if (result.ok) {
-        toast({
-          title: "Registration successful",
-          description: "You've been registered and added to the team. Please log in.",
+
+    const verifyInvitation = async () => {
+      try {
+        const response = await fetch(`/api/teams/join`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ invitationCode: code }),
         });
-        
-        // Redirect to login page
-        setLocation("/auth/login");
-      } else {
-        const errorData = await result.json();
+
+        if (!response.ok) {
+          throw new Error("Invalid invitation code");
+        }
+
+        const data = await response.json();
+        setTeamData({
+          teamId: data.teamId,
+          teamName: data.teamName,
+        });
+        setVerifying(false);
+      } catch (error) {
+        setVerifying(false);
         toast({
-          title: "Registration failed",
-          description: errorData.message || "Something went wrong. Please try again.",
-          variant: "destructive"
+          title: "Invalid Invitation",
+          description: error instanceof Error ? error.message : "Failed to verify invitation code",
+          variant: "destructive",
         });
       }
+    };
+
+    verifyInvitation();
+  }, [code, toast]);
+
+  const onSubmit = async (data: InvitationFormData) => {
+    if (!teamData) return;
+
+    setLoading(true);
+    try {
+      // Register user with team
+      const response = await apiRequest("POST", "/api/auth/register-with-team", {
+        ...data,
+        teamId: teamData.teamId,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Registration failed");
+      }
+
+      toast({
+        title: "Registration successful",
+        description: "You are now registered to the team. Please login to continue.",
+      });
+
+      // Redirect to login page
+      setLocation("/login");
     } catch (error) {
-      console.error("Registration error:", error);
       toast({
         title: "Registration failed",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive"
+        description: error instanceof Error ? error.message : "An error occurred during registration",
+        variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
-  
-  if (!teamInfo) {
+
+  if (verifying) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-gray-900">
-        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" aria-label="Loading"/>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full"></div>
       </div>
     );
   }
-  
-  return (
-    <div className="flex items-center justify-center min-h-screen px-4 py-12 bg-gray-50 dark:bg-gray-900">
-      <div className="w-full max-w-md">
-        <Card className="shadow-xl">
-          <CardHeader className="space-y-1">
-            <div className="w-fit mx-auto bg-primary/10 p-3 rounded-full mb-2">
-              <UsersIcon className="w-6 h-6 text-primary" />
-            </div>
-            <CardTitle className="text-2xl font-bold text-center">Join {teamInfo.name}</CardTitle>
+
+  if (!teamData) {
+    return (
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center">Invalid Invitation</CardTitle>
             <CardDescription className="text-center">
-              Create your account to join the team
+              The invitation code is invalid or has expired.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Full Name</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input 
-                            {...field} 
-                            placeholder="John Smith" 
-                            className="pl-10" 
-                          />
-                          <ShieldIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input 
-                            {...field} 
-                            type="email" 
-                            placeholder="john@example.com" 
-                            className="pl-10" 
-                          />
-                          <MailIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="username"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Username</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input 
-                            {...field} 
-                            placeholder="johnsmith" 
-                            className="pl-10" 
-                          />
-                          <UsersIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input 
-                            {...field} 
-                            type="password" 
-                            className="pl-10" 
-                          />
-                          <KeyIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="confirmPassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Confirm Password</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input 
-                            {...field} 
-                            type="password" 
-                            className="pl-10" 
-                          />
-                          <KeyIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <span className="animate-spin mr-2">⟳</span>
-                      Registering...
-                    </>
-                  ) : (
-                    "Register & Join Team"
-                  )}
-                </Button>
-              </form>
-            </Form>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4 pt-0">
-            <div className="text-sm text-center text-gray-500 dark:text-gray-400">
-              Already have an account?{" "}
-              <Button 
-                variant="link" 
-                className="p-0 h-auto font-semibold"
-                onClick={() => setLocation("/auth/login")}
-              >
-                Log in
-              </Button>
-            </div>
+          <CardFooter className="flex justify-center">
+            <Button onClick={() => setLocation("/login")}>Go to Login</Button>
           </CardFooter>
         </Card>
       </div>
+    );
+  }
+
+  return (
+    <div className="container flex items-center justify-center min-h-screen py-10">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1">
+          <div className="flex justify-center mb-2">
+            <Users className="h-10 w-10 text-primary" />
+          </div>
+          <CardTitle className="text-2xl text-center">Join {teamData.teamName}</CardTitle>
+          <CardDescription className="text-center">
+            Create an account to join the team
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Full Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="John Smith" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input placeholder="john@example.com" type="email" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="username"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Username</FormLabel>
+                    <FormControl>
+                      <Input placeholder="johnsmith" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input placeholder="******" type="password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirm Password</FormLabel>
+                    <FormControl>
+                      <Input placeholder="******" type="password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />}
+                Join Team
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+        <CardFooter className="flex justify-center border-t pt-4">
+          <Button variant="link" onClick={() => setLocation("/login")}>
+            Already have an account? Login
+          </Button>
+        </CardFooter>
+      </Card>
     </div>
   );
 }

@@ -1146,10 +1146,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
-        res.json({
-          message: "Demo data created successfully",
-          admin: { username: admin.username, password: "password" }
-        });
+        // Log the user in with passport
+        if (!req.isAuthenticated()) {
+          req.login(admin, (err) => {
+            if (err) {
+              console.error("Error logging in demo user:", err);
+              return res.status(500).json({ message: "Failed to log in demo user" });
+            }
+            
+            // Return success with user info
+            return res.json({
+              message: "Demo data created successfully",
+              admin: { 
+                id: admin.id,
+                username: admin.username, 
+                password: "password",
+                name: admin.name,
+                email: admin.email,
+                role: admin.role,
+                teamId: admin.teamId
+              }
+            });
+          });
+        } else {
+          // Already logged in
+          res.json({
+            message: "Demo data created successfully",
+            admin: { 
+              id: admin.id,
+              username: admin.username, 
+              password: "password",
+              name: admin.name,
+              email: admin.email,
+              role: admin.role,
+              teamId: admin.teamId
+            }
+          });
+        }
       } catch (error: any) {
         res.status(500).json({ message: error.message });
       }

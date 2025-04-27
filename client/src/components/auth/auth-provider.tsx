@@ -60,9 +60,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (process.env.NODE_ENV === "development") {
       const createDemoData = async () => {
         try {
-          await apiRequest("POST", "/api/demo-data");
-          // Use default user for demo
-          setUser(defaultUser);
+          // Create demo data and get the admin user from server
+          const response = await apiRequest("POST", "/api/demo-data");
+          const data = await response.json();
+          
+          // Use the admin user data from the response, which is now authenticated on the server
+          if (data.admin) {
+            setUser({
+              id: data.admin.id,
+              name: data.admin.name,
+              username: data.admin.username,
+              email: data.admin.email,
+              role: data.admin.role,
+              teamId: data.admin.teamId
+            });
+          } else {
+            // Fallback to checking auth if no admin data
+            await checkAuth();
+          }
         } catch (error) {
           console.error("Failed to create demo data", error);
           

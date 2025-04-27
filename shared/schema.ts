@@ -129,6 +129,19 @@ export const creditTransactions = pgTable("credit_transactions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const calendarIntegrations = pgTable("calendar_integrations", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  provider: text("provider").notNull(), // "google", "apple"
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  expiresAt: timestamp("expires_at"),
+  calendarId: text("calendar_id"), // The external calendar ID where events are created
+  isActive: boolean("is_active").default(true),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Insert schemas for validation
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -172,6 +185,12 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
   createdAt: true
 });
 
+export const insertCalendarIntegrationSchema = createInsertSchema(calendarIntegrations).omit({
+  id: true,
+  createdAt: true,
+  lastSyncedAt: true
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -197,3 +216,5 @@ export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type CreditTransaction = typeof creditTransactions.$inferSelect;
 export type InsertCreditTransaction = z.infer<typeof insertCreditTransactionSchema>;
+export type CalendarIntegration = typeof calendarIntegrations.$inferSelect;
+export type InsertCalendarIntegration = z.infer<typeof insertCalendarIntegrationSchema>;

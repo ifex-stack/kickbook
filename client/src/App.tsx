@@ -16,6 +16,7 @@ import Achievements from "@/pages/achievements";
 import Subscription from "@/pages/subscription";
 import Checkout from "@/pages/checkout";
 import Settings from "@/pages/settings";
+import More from "@/pages/more";
 
 function Router() {
   return (
@@ -34,6 +35,7 @@ function Router() {
         <Route path="/subscription" component={Subscription} />
         <Route path="/checkout" component={Checkout} />
         <Route path="/settings" component={Settings} />
+        <Route path="/more" component={More} />
         
         {/* Fallback to 404 */}
         <Route component={NotFound} />

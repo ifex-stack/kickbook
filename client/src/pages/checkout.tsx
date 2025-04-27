@@ -146,7 +146,7 @@ export default function Checkout() {
   }, [setLocation, toast, planName]);
 
   const appearance = {
-    theme: 'stripe',
+    theme: 'stripe' as const,
     variables: {
       colorPrimary: '#0070f3',
     },

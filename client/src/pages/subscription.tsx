@@ -77,7 +77,8 @@ export default function Subscription() {
   };
   
   // Get current plan based on subscription
-  const currentPlan = team?.subscription ? plans[team.subscription as keyof typeof plans] : plans.basic;
+  const currentPlanType = subscriptionData?.subscription || "basic";
+  const currentPlan = plans[currentPlanType as keyof typeof plans];
   
   // Mock billing history for UI demonstration
   const dummyBillingHistory = [
@@ -164,7 +165,7 @@ export default function Subscription() {
             <CardTitle>Payment Method</CardTitle>
           </CardHeader>
           <CardContent>
-            {team?.subscription === "basic" ? (
+            {currentPlanType === "basic" ? (
               <div className="text-center py-4">
                 <p className="text-gray-500 dark:text-gray-400 mb-4">No payment method required for the Basic plan</p>
                 {user?.role === "admin" && (
@@ -203,7 +204,7 @@ export default function Subscription() {
       </div>
       
       {/* Only show billing history for paid plans */}
-      {team?.subscription !== "basic" && (
+      {currentPlanType !== "basic" && (
         <Card>
           <CardHeader>
             <CardTitle>Billing History</CardTitle>
@@ -272,6 +273,7 @@ export default function Subscription() {
         <SubscriptionModal 
           isOpen={showUpgradeModal}
           onClose={() => setShowUpgradeModal(false)}
+          currentPlan={subscriptionData?.subscription || "basic"}
         />
       )}
     </AppShell>

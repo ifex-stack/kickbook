@@ -14,6 +14,7 @@ import Team from "@/pages/team";
 import Statistics from "@/pages/statistics";
 import Achievements from "@/pages/achievements";
 import Subscription from "@/pages/subscription";
+import Checkout from "@/pages/checkout";
 import Settings from "@/pages/settings";
 
 function Router() {
@@ -31,6 +32,7 @@ function Router() {
         <Route path="/statistics" component={Statistics} />
         <Route path="/achievements" component={Achievements} />
         <Route path="/subscription" component={Subscription} />
+        <Route path="/checkout" component={Checkout} />
         <Route path="/settings" component={Settings} />
         
         {/* Fallback to 404 */}

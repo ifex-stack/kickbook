@@ -51,25 +51,59 @@ const CheckoutForm = ({ planName }: { planName: string }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <PaymentElement />
-      
-      {errorMessage && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
-          {errorMessage}
+      <div className="space-y-5">
+        <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-100 dark:border-gray-700">
+          <PaymentElement />
         </div>
-      )}
+        
+        {errorMessage && (
+          <div className="flex items-start p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg text-sm">
+            <div className="mr-3 mt-0.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+            <div>{errorMessage}</div>
+          </div>
+        )}
+        
+        <div className="pt-2">
+          <Button 
+            type="submit" 
+            className="w-full py-6 text-base font-semibold bg-primary hover:bg-primary/90"
+            disabled={!stripe || isProcessing}
+          >
+            {isProcessing ? (
+              <div className="flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                Processing...
+              </div>
+            ) : (
+              <div className="flex items-center justify-center">
+                Complete Subscription
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-2">
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                  <polyline points="12 5 19 12 12 19"></polyline>
+                </svg>
+              </div>
+            )}
+          </Button>
+        </div>
+      </div>
       
-      <Button 
-        type="submit" 
-        className="w-full" 
-        disabled={!stripe || isProcessing}
-      >
-        {isProcessing ? "Processing..." : "Pay Now"}
-      </Button>
-      
-      <p className="text-xs text-gray-500 text-center">
-        Your payment is secured by Stripe. We don't store your card details.
-      </p>
+      <div className="mt-6 text-center">
+        <div className="flex items-center justify-center mb-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-600 mr-2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Secure SSL Encryption</span>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+          By clicking the button above, you agree to our Terms of Service and authorize us to charge your card until you cancel.
+        </p>
+      </div>
     </form>
   );
 };
@@ -158,42 +192,131 @@ export default function Checkout() {
 
   return (
     <AppShell user={{ name: user?.name || "User", role: user?.role || "player" }}>
-      <div className="max-w-md mx-auto my-10 px-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Complete Your Purchase</CardTitle>
-            <CardDescription>Subscribe to {planDetails.name}</CardDescription>
-          </CardHeader>
-          
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-center p-4 rounded-lg border bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
-              <div>
-                <h3 className="font-medium">{planDetails.name}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{planDetails.description}</p>
-              </div>
-              <div className="text-lg font-semibold">{planDetails.price}</div>
+      <div className="max-w-4xl mx-auto my-10 px-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+          {/* Left side - Order Summary */}
+          <div className="md:col-span-2">
+            <div className="sticky top-24">
+              <Card className="border-0 shadow-lg">
+                <CardHeader className="bg-primary/5 dark:bg-primary/10 rounded-t-lg border-b">
+                  <CardTitle className="text-xl font-bold">Order Summary</CardTitle>
+                </CardHeader>
+                
+                <CardContent className="pt-6">
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-primary/10 p-3 rounded-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                          <circle cx="9" cy="7" r="4"></circle>
+                          <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg">{planDetails.name}</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{planDetails.description}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="text-gray-600 dark:text-gray-400">Subscription</span>
+                        <span>{planDetails.price}</span>
+                      </div>
+                      
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Billing</span>
+                        <span>Monthly</span>
+                      </div>
+                    </div>
+                    
+                    <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                      <div className="flex justify-between font-semibold">
+                        <span>Total</span>
+                        <span className="text-lg">{planDetails.price}</span>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Includes all applicable taxes
+                      </p>
+                    </div>
+                    
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
+                      <div className="flex">
+                        <div className="text-blue-600 dark:text-blue-400 mr-3">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                          </svg>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-blue-800 dark:text-blue-300">Free Trial Included</h4>
+                          <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                            Your subscription includes a 14-day free trial. You can cancel anytime during this period.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+                
+                <CardFooter className="border-t bg-gray-50 dark:bg-gray-800 rounded-b-lg flex justify-between">
+                  <Button variant="ghost" size="sm" onClick={() => setLocation("/subscription")}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                      <path d="M19 12H5M12 19l-7-7 7-7" />
+                    </svg>
+                    Back
+                  </Button>
+                  
+                  <div className="text-xs text-gray-500 flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    Secure Checkout
+                  </div>
+                </CardFooter>
+              </Card>
             </div>
-            
-            {clientSecret && (
-              <Elements options={options} stripe={stripePromise}>
-                <CheckoutForm planName={planName} />
-              </Elements>
-            )}
-          </CardContent>
+          </div>
           
-          <CardFooter className="justify-between flex-col sm:flex-row space-y-2 sm:space-y-0 text-sm text-gray-500">
-            <Button variant="ghost" onClick={() => setLocation("/subscription")}>
-              Cancel
-            </Button>
-            <div className="flex items-center">
-              <span className="mr-2">Secure payment</span>
-              <svg className="h-5 w-5" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <path fill="#6772e5" d="M32 16c0 8.837-7.163 16-16 16S0 24.837 0 16 7.163 0 16 0s16 7.163 16 16z" />
-                <path fill="#fff" d="M13.5 11.5h9a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zm10-3h-11a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-11a2 2 0 0 0-2-2z" />
-              </svg>
-            </div>
-          </CardFooter>
-        </Card>
+          {/* Right side - Payment form */}
+          <div className="md:col-span-3">
+            <Card className="border-0 shadow-lg">
+              <CardHeader className="border-b">
+                <CardTitle className="text-xl font-bold">Payment Details</CardTitle>
+                <CardDescription>
+                  Complete your subscription to {planDetails.name}
+                </CardDescription>
+              </CardHeader>
+              
+              <CardContent className="pt-6">
+                {clientSecret ? (
+                  <Elements options={options} stripe={stripePromise}>
+                    <CheckoutForm planName={planName} />
+                  </Elements>
+                ) : (
+                  <div className="flex items-center justify-center py-10">
+                    <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" aria-label="Loading"/>
+                  </div>
+                )}
+              </CardContent>
+              
+              <CardFooter className="border-t bg-gray-50 dark:bg-gray-800 flex flex-col text-center py-4">
+                <div className="flex justify-center space-x-4 mb-2">
+                  <img src="https://www.svgrepo.com/show/328132/visa.svg" alt="Visa" className="h-6 w-10 opacity-70" />
+                  <img src="https://www.svgrepo.com/show/328125/mastercard.svg" alt="Mastercard" className="h-6 w-10 opacity-70" />
+                  <img src="https://www.svgrepo.com/show/328273/american-express.svg" alt="Amex" className="h-6 w-10 opacity-70" />
+                  <img src="https://www.svgrepo.com/show/334366/paypal.svg" alt="PayPal" className="h-6 w-10 opacity-70" />
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Your payment information is encrypted and secure. We never store your full card details.
+                </p>
+              </CardFooter>
+            </Card>
+          </div>
+        </div>
       </div>
     </AppShell>
   );

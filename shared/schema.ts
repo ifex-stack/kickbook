@@ -12,6 +12,9 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("player"), // admin or player
   teamId: integer("team_id"),
   isActive: boolean("is_active").notNull().default(true),
+  credits: integer("credits").default(0),
+  referralCode: text("referral_code"),
+  referredBy: integer("referred_by"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -22,6 +25,9 @@ export const teams = pgTable("teams", {
   name: text("name").notNull(),
   ownerId: integer("owner_id").notNull(), // Admin who created the team
   subscription: text("subscription").default("basic"), // basic, pro, enterprise
+  allowPlayerRegistration: boolean("allow_player_registration").default(true),
+  allowPlayerBookingManagement: boolean("allow_player_booking_management").default(false),
+  invitationCode: text("invitation_code"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -87,6 +93,18 @@ export const playerAchievements = pgTable("player_achievements", {
   earnedAt: timestamp("earned_at").defaultNow().notNull(),
 });
 
+export const creditTransactions = pgTable("credit_transactions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  amount: integer("amount").notNull(), // Can be positive (purchase) or negative (usage)
+  type: text("type").notNull(), // "purchase", "booking", "referral_bonus", "admin_adjustment"
+  bookingId: integer("booking_id"), // Optional, only for booking transactions
+  description: text("description"),
+  teamOwnerId: integer("team_owner_id"), // To track which team owner gets paid
+  status: text("status").notNull().default("completed"), // "pending", "completed", "failed", "refunded"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Insert schemas for validation
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -120,6 +138,11 @@ export const insertPlayerStatsSchema = createInsertSchema(playerStats).omit({
   createdAt: true
 });
 
+export const insertCreditTransactionSchema = createInsertSchema(creditTransactions).omit({
+  id: true,
+  createdAt: true
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -141,3 +164,5 @@ export type InsertPlayerStats = z.infer<typeof insertPlayerStatsSchema>;
 
 export type Achievement = typeof achievements.$inferSelect;
 export type PlayerAchievement = typeof playerAchievements.$inferSelect;
+export type CreditTransaction = typeof creditTransactions.$inferSelect;
+export type InsertCreditTransaction = z.infer<typeof insertCreditTransactionSchema>;

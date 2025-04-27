@@ -168,6 +168,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: error.message });
     }
   });
+  
+  app.get("/api/teams/:id", requireAuth, async (req, res) => {
+    try {
+      const teamId = parseInt(req.params.id);
+      const team = await storage.getTeam(teamId);
+      
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      
+      const user = req.user as any;
+      
+      // Ensure user is associated with the team or is the team owner
+      if (user.teamId !== teamId && team.ownerId !== user.id) {
+        return res.status(403).json({ message: "Not authorized to view this team" });
+      }
+      
+      res.json(team);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.patch("/api/teams/:id/settings", requireAdmin, async (req, res) => {
+    try {
+      const teamId = parseInt(req.params.id);
+      const team = await storage.getTeam(teamId);
+      
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      
+      const user = req.user as any;
+      
+      // Ensure user is the admin of the team
+      if (user.role !== "admin" || team.ownerId !== user.id) {
+        return res.status(403).json({ message: "Not authorized to update team settings" });
+      }
+      
+      // Update team settings
+      const updatedTeam = await storage.updateTeam(teamId, {
+        ...req.body,
+      });
+      
+      res.json(updatedTeam);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
 
   app.post("/api/teams", requireAuth, async (req, res) => {
     try {
@@ -199,20 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/teams/:id", requireAuth, async (req, res) => {
-    try {
-      const teamId = parseInt(req.params.id);
-      const team = await storage.getTeam(teamId);
-      
-      if (!team) {
-        return res.status(404).json({ message: "Team not found" });
-      }
-      
-      res.json(team);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
+
 
   app.put("/api/teams/:id", requireAdmin, async (req, res) => {
     try {

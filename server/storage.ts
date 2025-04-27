@@ -57,6 +57,15 @@ export interface IStorage {
   getAchievements(): Promise<Achievement[]>;
   getPlayerAchievements(playerId: number): Promise<{achievement: Achievement, earnedAt: Date}[]>;
   addPlayerAchievement(playerId: number, achievementId: number): Promise<boolean>;
+  
+  // Credits and Transactions
+  getUserCredits(userId: number): Promise<number>;
+  addUserCredits(userId: number, amount: number, type: string, description?: string, teamOwnerId?: number): Promise<User>;
+  useUserCredits(userId: number, amount: number, bookingId: number, description?: string): Promise<boolean>;
+  getTransactionsByUser(userId: number): Promise<CreditTransaction[]>;
+  getTransactionsByTeamOwner(teamOwnerId: number): Promise<CreditTransaction[]>;
+  createCreditTransaction(transaction: InsertCreditTransaction): Promise<CreditTransaction>;
+  updateTransactionStatus(id: number, status: string): Promise<CreditTransaction | undefined>;
 }
 
 export class MemStorage implements IStorage {

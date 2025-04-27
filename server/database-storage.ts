@@ -237,6 +237,24 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async createAchievement(achievement: { title: string, description: string, icon: string, points: number }): Promise<Achievement> {
+    try {
+      const [newAchievement] = await db.insert(achievements)
+        .values({
+          title: achievement.title,
+          description: achievement.description,
+          icon: achievement.icon,
+          points: achievement.points
+        })
+        .returning();
+      
+      return newAchievement;
+    } catch (error) {
+      console.error("Error creating achievement:", error);
+      throw new Error("Failed to create achievement");
+    }
+  }
+
   async addPlayerAchievement(playerId: number, achievementId: number): Promise<boolean> {
     try {
       // Check if player already has this achievement

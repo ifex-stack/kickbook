@@ -59,6 +59,7 @@ export interface IStorage {
   getAchievements(): Promise<Achievement[]>;
   getPlayerAchievements(playerId: number): Promise<{achievement: Achievement, earnedAt: Date}[]>;
   addPlayerAchievement(playerId: number, achievementId: number): Promise<boolean>;
+  createAchievement(achievement: {title: string, description: string, icon: string, points: number}): Promise<Achievement>;
   
   // Credits and Transactions
   getUserCredits(userId: number): Promise<number>;
@@ -369,6 +370,18 @@ export class MemStorage implements IStorage {
     });
   }
   
+  async createAchievement(achievement: { title: string, description: string, icon: string, points: number }): Promise<Achievement> {
+    const id = this.achievementIdCounter++;
+    const newAchievement: Achievement = {
+      id,
+      ...achievement,
+      createdAt: new Date()
+    };
+    
+    this.achievements.set(id, newAchievement);
+    return newAchievement;
+  }
+
   async addPlayerAchievement(playerId: number, achievementId: number): Promise<boolean> {
     // Check if player already has this achievement
     const existing = Array.from(this.playerAchievements.values())

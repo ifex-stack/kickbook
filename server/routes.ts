@@ -882,27 +882,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   if (process.env.NODE_ENV === "development") {
     app.post("/api/demo-data", async (req, res) => {
       try {
-        // Create admin user
-        const admin = await storage.createUser({
-          username: "admin",
-          password: "password",
-          email: "admin@example.com",
-          name: "John Coach",
-          role: "admin"
-        });
+        // Check if demo data already exists
+        let admin = await storage.getUserByUsername("admin");
         
-        // Create team
-        const team = await storage.createTeam({
-          name: "Football Stars",
-          ownerId: admin.id,
-          subscription: "basic"
-        });
+        if (!admin) {
+          // Create admin user
+          admin = await storage.createUser({
+            username: "admin",
+            password: "password",
+            email: "admin@example.com",
+            name: "John Coach",
+            role: "admin"
+          });
+        }
+        
+        // Check if team exists
+        const teams = await storage.getTeamsByOwner(admin.id);
+        let team = teams.length > 0 ? teams[0] : null;
+        
+        if (!team) {
+          // Create team
+          team = await storage.createTeam({
+            name: "Football Stars",
+            ownerId: admin.id,
+            subscription: "basic"
+          });
+        }
         
         // Update admin with team id
         await storage.updateUser(admin.id, { teamId: team.id });
         
-        // Create players
-        const players = [
+        // Create or get players
+        const playerDetails = [
           {
             username: "player1",
             password: "password",
@@ -930,123 +941,210 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ];
         
         const createdPlayers = [];
-        for (const player of players) {
-          createdPlayers.push(await storage.createUser(player));
-        }
-        
-        // Create bookings
-        const now = new Date();
-        const bookings = [
-          {
-            teamId: team.id,
-            title: "7-a-side Practice Match",
-            location: "Northside Pitch, Field #3",
-            format: "7-a-side",
-            startTime: new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000), // 4 days from now
-            endTime: new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000), // 2 hours later
-            totalSlots: 14,
-            availableSlots: 11
-          },
-          {
-            teamId: team.id,
-            title: "5-a-side Tournament",
-            location: "Central Park Fields",
-            format: "5-a-side",
-            startTime: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-            endTime: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000), // 4 hours later
-            totalSlots: 10,
-            availableSlots: 8
-          },
-          {
-            teamId: team.id,
-            title: "11-a-side League Match",
-            location: "City Stadium, Main Field",
-            format: "11-a-side",
-            startTime: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000), // 14 days from now
-            endTime: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000), // 2 hours later
-            totalSlots: 22,
-            availableSlots: 14
+        for (const playerDetail of playerDetails) {
+          // Check if player exists
+          let player = await storage.getUserByUsername(playerDetail.username);
+          
+          if (!player) {
+            player = await storage.createUser(playerDetail);
+          } else {
+            // Update team ID if needed
+            if (player.teamId !== team.id) {
+              player = await storage.updateUser(player.id, { teamId: team.id });
+            }
           }
-        ];
-        
-        const createdBookings = [];
-        for (const booking of bookings) {
-          createdBookings.push(await storage.createBooking(booking));
+          
+          createdPlayers.push(player);
         }
         
-        // Add players to bookings
-        await storage.createPlayerBooking({
-          playerId: admin.id,
-          bookingId: createdBookings[0].id,
-          status: "confirmed"
-        });
+        // Create achievements if needed
+        const existingAchievements = await storage.getAchievements();
+        if (existingAchievements.length === 0) {
+          const achievementsList = [
+            { title: "First Goal", description: "Score your first goal", icon: "sports_score", points: 10 },
+            { title: "Goal Machine", description: "Score 10 goals in total", icon: "whatshot", points: 30 },
+            { title: "Hat-trick Hero", description: "Score three goals in one match", icon: "stars", points: 30 },
+            { title: "Playmaker", description: "Make 5 assists in a season", icon: "handshake", points: 20 },
+            { title: "Team Player", description: "Participate in 10 matches", icon: "groups", points: 25 },
+            { title: "Winner", description: "Win your first match", icon: "emoji_events", points: 15 },
+            { title: "Clean Sheet", description: "Complete a match without conceding a goal", icon: "shield", points: 15 }
+          ];
+          
+          for (const achievement of achievementsList) {
+            try {
+              await storage.createAchievement(achievement);
+            } catch (error) {
+              console.error(`Failed to create achievement ${achievement.title}:`, error);
+            }
+          }
+        }
         
-        await storage.createPlayerBooking({
-          playerId: createdPlayers[0].id,
-          bookingId: createdBookings[0].id,
-          status: "confirmed"
-        });
+        // Create upcoming bookings
+        const now = new Date();
+        const existingBookings = await storage.getBookingsByTeam(team.id);
+        const upcomingBookings = existingBookings.filter(b => b.startTime.getTime() > now.getTime());
         
-        await storage.createPlayerBooking({
-          playerId: createdPlayers[1].id,
-          bookingId: createdBookings[0].id,
-          status: "confirmed"
-        });
+        // Only create new bookings if there are none or fewer than 3 upcoming bookings
+        if (upcomingBookings.length < 3) {
+          const bookingTemplates = [
+            {
+              teamId: team.id,
+              title: "7-a-side Practice Match",
+              location: "Northside Pitch, Field #3",
+              format: "7-a-side",
+              startTime: new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000), // 4 days from now
+              endTime: new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000), // 2 hours later
+              totalSlots: 14,
+              availableSlots: 11
+            },
+            {
+              teamId: team.id,
+              title: "5-a-side Tournament",
+              location: "Central Park Fields",
+              format: "5-a-side",
+              startTime: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+              endTime: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000), // 4 hours later
+              totalSlots: 10,
+              availableSlots: 8
+            },
+            {
+              teamId: team.id,
+              title: "11-a-side League Match",
+              location: "City Stadium, Main Field",
+              format: "11-a-side",
+              startTime: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000), // 14 days from now
+              endTime: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000), // 2 hours later
+              totalSlots: 22,
+              availableSlots: 14
+            }
+          ];
+          
+          const createdBookings = [];
+          for (const bookingTemplate of bookingTemplates) {
+            // Check if similar booking already exists
+            const similarBooking = upcomingBookings.find(b => 
+              b.title === bookingTemplate.title && 
+              b.format === bookingTemplate.format
+            );
+            
+            if (!similarBooking) {
+              createdBookings.push(await storage.createBooking(bookingTemplate));
+            }
+          }
+          
+          // If we created at least one booking, add players to the first one
+          if (createdBookings.length > 0) {
+            // Add admin to the booking
+            try {
+              await storage.createPlayerBooking({
+                playerId: admin.id,
+                bookingId: createdBookings[0].id,
+                status: "confirmed"
+              });
+            } catch (error) {
+              console.error("Failed to add admin to booking:", error);
+            }
+            
+            // Add first player if available
+            if (createdPlayers.length >= 1) {
+              try {
+                await storage.createPlayerBooking({
+                  playerId: createdPlayers[0].id,
+                  bookingId: createdBookings[0].id,
+                  status: "confirmed"
+                });
+              } catch (error) {
+                console.error("Failed to add player 1 to booking:", error);
+              }
+            }
+            
+            // Add second player if available
+            if (createdPlayers.length >= 2) {
+              try {
+                await storage.createPlayerBooking({
+                  playerId: createdPlayers[1].id,
+                  bookingId: createdBookings[0].id,
+                  status: "confirmed"
+                });
+              } catch (error) {
+                console.error("Failed to add player 2 to booking:", error);
+              }
+            }
+          }
+        }
         
-        // Create match stats for a past match
-        const pastBooking = await storage.createBooking({
-          teamId: team.id,
-          title: "Friendly Match",
-          location: "Local Pitch",
-          format: "5-a-side",
-          startTime: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
-          endTime: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000), // 2 hours later
-          totalSlots: 10,
-          availableSlots: 0
-        });
+        // Check for existing past bookings
+        const pastDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+        const pastBookings = await storage.getBookingsByTeam(team.id);
+        let pastBooking = pastBookings.find(b => 
+          b.title === "Friendly Match" && 
+          b.format === "5-a-side" &&
+          b.startTime.getTime() < now.getTime()
+        );
         
-        await storage.createMatchStats({
-          bookingId: pastBooking.id,
-          teamScore: 3,
-          opponentScore: 1,
-          isWin: true,
-          isDraw: false,
-          isLoss: false
-        });
-        
-        // Create player stats for the past match
-        await storage.createPlayerStats({
-          playerId: createdPlayers[0].id,
-          bookingId: pastBooking.id,
-          goals: 2,
-          assists: 1,
-          yellowCards: 0,
-          redCards: 0,
-          minutesPlayed: 90,
-          isInjured: false
-        });
-        
-        await storage.createPlayerStats({
-          playerId: createdPlayers[1].id,
-          bookingId: pastBooking.id,
-          goals: 1,
-          assists: 0,
-          yellowCards: 1,
-          redCards: 0,
-          minutesPlayed: 90,
-          isInjured: false
-        });
-        
-        await storage.createPlayerStats({
-          playerId: createdPlayers[2].id,
-          bookingId: pastBooking.id,
-          goals: 0,
-          assists: 2,
-          yellowCards: 0,
-          redCards: 0,
-          minutesPlayed: 90,
-          isInjured: true
-        });
+        // Create past booking if it doesn't exist
+        if (!pastBooking) {
+          pastBooking = await storage.createBooking({
+            teamId: team.id,
+            title: "Friendly Match",
+            location: "Local Pitch",
+            format: "5-a-side",
+            startTime: pastDate,
+            endTime: new Date(pastDate.getTime() + 2 * 60 * 60 * 1000), // 2 hours later
+            totalSlots: 10,
+            availableSlots: 0
+          });
+          
+          // Create match stats
+          await storage.createMatchStats({
+            bookingId: pastBooking.id,
+            teamScore: 3,
+            opponentScore: 1,
+            isWin: true,
+            isDraw: false,
+            isLoss: false
+          });
+          
+          // Create player stats for the past match
+          if (createdPlayers.length >= 1 && createdPlayers[0]) {
+            await storage.createPlayerStats({
+              playerId: createdPlayers[0].id,
+              bookingId: pastBooking.id,
+              goals: 2,
+              assists: 1,
+              yellowCards: 0,
+              redCards: 0,
+              minutesPlayed: 90,
+              isInjured: false
+            });
+          }
+          
+          if (createdPlayers.length >= 2 && createdPlayers[1]) {
+            await storage.createPlayerStats({
+              playerId: createdPlayers[1].id,
+              bookingId: pastBooking.id,
+              goals: 1,
+              assists: 0,
+              yellowCards: 1,
+              redCards: 0,
+              minutesPlayed: 90,
+              isInjured: false
+            });
+          }
+          
+          if (createdPlayers.length >= 3 && createdPlayers[2]) {
+            await storage.createPlayerStats({
+              playerId: createdPlayers[2].id,
+              bookingId: pastBooking.id,
+              goals: 0,
+              assists: 2,
+              yellowCards: 0,
+              redCards: 0,
+              minutesPlayed: 90,
+              isInjured: true
+            });
+          }
+        }
         
         res.json({
           message: "Demo data created successfully",

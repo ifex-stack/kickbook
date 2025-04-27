@@ -789,6 +789,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const updatedStats = await storage.updatePlayerStats(existingStats.id, req.body);
+      
+      // Check for achievements after updating stats
+      await storage.checkPlayerAchievements(playerId);
+      
       res.json(updatedStats);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

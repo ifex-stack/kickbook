@@ -177,6 +177,10 @@ export class DatabaseStorage implements IStorage {
 
   async createPlayerStats(insertPlayerStats: InsertPlayerStats): Promise<PlayerStats> {
     const [stats] = await db.insert(playerStats).values(insertPlayerStats).returning();
+    
+    // Check for achievements after creating player stats
+    await this.checkPlayerAchievements(insertPlayerStats.playerId);
+    
     return stats;
   }
 
@@ -185,6 +189,12 @@ export class DatabaseStorage implements IStorage {
       .set(update)
       .where(eq(playerStats.id, id))
       .returning();
+      
+    if (stats) {
+      // Check for achievements after updating player stats
+      await this.checkPlayerAchievements(stats.playerId);
+    }
+    
     return stats;
   }
 

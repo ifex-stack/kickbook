@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 20 14.3% 4.1%;
+  --muted: 60 4.8% 95.9%;
+  --muted-foreground: 25 5.3% 44.7%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 20 14.3% 4.1%;
+  --card: 0 0% 100%;
+  --card-foreground: 20 14.3% 4.1%;
+  --border: 20 5.9% 90%;
+  --input: 20 5.9% 90%;
+  --primary: 122 39% 34%;  /* Green from design */
+  --primary-foreground: 355 100% 100%;
+  --secondary: 33 100% 50%;  /* Orange from design */
+  --secondary-foreground: 24 9.8% 10%;
+  --accent: 206 100% 40%;  /* Blue from design */
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 60 9.1% 97.8%;
+  --ring: 122 39% 34%;  /* Match primary */
+  --radius: 0.5rem;
+  
+  /* Additional colors from design */
+  --success: 122 45% 39%;
+  --error: 0 68% 50%;
+  --warning: 36 100% 50%;
+  --info: 201 100% 41%;
+  
+  /* Chart colors */
+  --chart-1: var(--primary);
+  --chart-2: var(--secondary);
+  --chart-3: var(--accent);
+  --chart-4: var(--success);
+  --chart-5: var(--error);
+}
+
+.dark {
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --popover: 240 10% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --card: 240 10% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --primary: 122 39% 34%;  /* Green from design */
+  --primary-foreground: 355 100% 100%;
+  --secondary: 33 100% 50%;  /* Orange from design */
+  --secondary-foreground: 0 0% 100%;
+  --accent: 206 100% 40%;  /* Blue from design */
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 122 39% 34%;  /* Match primary */
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-body antialiased bg-background text-foreground;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+  }
+
+  .stats-value {
+    @apply font-mono;
+  }
+
+  .custom-shadow {
+    @apply shadow-md;
+  }
+
+  .calendar-day-available {
+    @apply bg-success bg-opacity-20;
+  }
+
+  .calendar-day-limited {
+    @apply bg-warning bg-opacity-20;
+  }
+
+  .calendar-day-booked {
+    @apply bg-error bg-opacity-20;
+  }
+
+  .onboarding-dot {
+    @apply h-2 w-2 mx-1 rounded-full inline-block transition-colors;
+  }
+
+  .onboarding-dot.active {
+    @apply bg-primary dark:bg-primary;
+  }
+
+  .sidebar-link {
+    @apply transition-all duration-200;
+  }
+
+  .sidebar-link:hover {
+    @apply bg-primary bg-opacity-10;
+  }
+
+  .dark .sidebar-link:hover {
+    @apply bg-primary bg-opacity-10;
+  }
+}

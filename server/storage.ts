@@ -1,9 +1,9 @@
 import { 
-  users, teams, bookings, playerBookings, matchStats, playerStats, achievements, playerAchievements, creditTransactions,
+  users, teams, bookings, playerBookings, matchStats, playerStats, achievements, playerAchievements, creditTransactions, notifications,
   type User, type InsertUser, type Team, type InsertTeam, type Booking, type InsertBooking,
   type PlayerBooking, type InsertPlayerBooking, type MatchStats, type InsertMatchStats,
   type PlayerStats, type InsertPlayerStats, type Achievement, type PlayerAchievement,
-  type CreditTransaction, type InsertCreditTransaction
+  type CreditTransaction, type InsertCreditTransaction, type Notification, type InsertNotification
 } from "@shared/schema";
 
 export interface IStorage {
@@ -24,6 +24,7 @@ export interface IStorage {
   // Bookings
   getBooking(id: number): Promise<Booking | undefined>;
   getBookingsByTeam(teamId: number): Promise<Booking[]>;
+  getAllBookings(): Promise<Booking[]>;
   createBooking(booking: InsertBooking): Promise<Booking>;
   updateBooking(id: number, booking: Partial<Booking>): Promise<Booking | undefined>;
   deleteBooking(id: number): Promise<boolean>;
@@ -61,6 +62,14 @@ export interface IStorage {
   addPlayerAchievement(playerId: number, achievementId: number): Promise<boolean>;
   createAchievement(achievement: {title: string, description: string, icon: string, points: number}): Promise<Achievement>;
   
+  // Notifications
+  getNotifications(userId: number): Promise<Notification[]>;
+  getUnreadNotifications(userId: number): Promise<Notification[]>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationAsRead(id: number): Promise<boolean>;
+  markAllNotificationsAsRead(userId: number): Promise<boolean>;
+  deleteNotification(id: number): Promise<boolean>;
+  
   // Credits and Transactions
   getUserCredits(userId: number): Promise<number>;
   addUserCredits(userId: number, amount: number, type: string, description?: string, teamOwnerId?: number): Promise<User>;
@@ -81,6 +90,7 @@ export class MemStorage implements IStorage {
   private achievements: Map<number, Achievement>;
   private playerAchievements: Map<number, PlayerAchievement>;
   private creditTransactions: Map<number, CreditTransaction>;
+  private notifications: Map<number, Notification>;
   
   private userIdCounter: number;
   private teamIdCounter: number;
@@ -91,6 +101,7 @@ export class MemStorage implements IStorage {
   private achievementIdCounter: number;
   private playerAchievementIdCounter: number;
   private creditTransactionIdCounter: number;
+  private notificationIdCounter: number;
 
   constructor() {
     this.users = new Map();
@@ -102,6 +113,7 @@ export class MemStorage implements IStorage {
     this.achievements = new Map();
     this.playerAchievements = new Map();
     this.creditTransactions = new Map();
+    this.notifications = new Map();
     
     this.userIdCounter = 1;
     this.teamIdCounter = 1;
@@ -112,6 +124,7 @@ export class MemStorage implements IStorage {
     this.achievementIdCounter = 1;
     this.playerAchievementIdCounter = 1;
     this.creditTransactionIdCounter = 1;
+    this.notificationIdCounter = 1;
     
     // Add some default achievements
     this.seedAchievements();
@@ -435,6 +448,60 @@ export class MemStorage implements IStorage {
         break;
       }
     }
+  }
+
+  // Notifications
+  async getNotifications(userId: number): Promise<Notification[]> {
+    return Array.from(this.notifications.values())
+      .filter(notification => notification.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async getUnreadNotifications(userId: number): Promise<Notification[]> {
+    return Array.from(this.notifications.values())
+      .filter(notification => notification.userId === userId && !notification.isRead)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const id = this.notificationIdCounter++;
+    const newNotification: Notification = {
+      ...notification,
+      id,
+      createdAt: new Date()
+    };
+    this.notifications.set(id, newNotification);
+    return newNotification;
+  }
+
+  async markNotificationAsRead(id: number): Promise<boolean> {
+    const notification = this.notifications.get(id);
+    if (!notification) return false;
+    
+    notification.isRead = true;
+    this.notifications.set(id, notification);
+    return true;
+  }
+
+  async markAllNotificationsAsRead(userId: number): Promise<boolean> {
+    const userNotifications = Array.from(this.notifications.values())
+      .filter(notification => notification.userId === userId && !notification.isRead);
+    
+    for (const notification of userNotifications) {
+      notification.isRead = true;
+      this.notifications.set(notification.id, notification);
+    }
+    
+    return true;
+  }
+
+  async deleteNotification(id: number): Promise<boolean> {
+    return this.notifications.delete(id);
+  }
+
+  // Get all bookings (for notification service)
+  async getAllBookings(): Promise<Booking[]> {
+    return Array.from(this.bookings.values());
   }
 
   // Credits and Transactions

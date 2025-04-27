@@ -1,40 +1,77 @@
 /**
- * Cancellation Service - Manages booking cancellation policies
- * 
- * Handles:
- * - Checking if a booking can be cancelled
- * - Calculating refund amounts
- * - Processing cancellations
- * - Enforcing team cancellation policies
+ * Cancellation Service - Manages booking cancellations and refund policies
  */
 
 import { storage } from "../storage";
-import { Booking, PlayerBooking, Team, User } from "@shared/schema";
-import { CANCELLATION_POLICY } from "../config";
-import { sendCancellationNotification } from "./notification-service";
+import { sendMatchCanceledNotification } from "./notification-service";
 
-interface CancellationResult {
+// Cancellation policy configuration - can be moved to team settings later
+export interface CancellationPolicy {
+  maxCancellationsPerMonth: number;          // Maximum allowed cancellations per month
+  minHoursBeforeForCancellation: number;     // Minimum hours before match to allow cancellation
+  refundPercent: number;                     // Percentage of credits to refund (0-100)
+  refundDeadlineHours: number;               // Hours before match when refund percentage changes
+  earlyRefundPercent: number;                // Refund percentage for early cancellations
+  allowTeamOwnerOverride: boolean;           // Whether team owner can override these settings
+}
+
+// Default team cancellation policy
+export const DEFAULT_CANCELLATION_POLICY: CancellationPolicy = {
+  maxCancellationsPerMonth: 2,
+  minHoursBeforeForCancellation: 6,
+  refundPercent: 50,              // 50% refund for regular cancellations
+  refundDeadlineHours: 24,        // 24 hours before match is the cutoff for early cancellation
+  earlyRefundPercent: 100,        // 100% refund for early cancellations
+  allowTeamOwnerOverride: true    // Team owners can override these settings
+};
+
+// The result of a cancellation request
+export interface CancellationResult {
   success: boolean;
   message: string;
   refundAmount?: number;
+  status?: string;
 }
 
-// Check if a player can cancel their booking
+/**
+ * Calculate refund amount based on team's cancellation policy
+ * @param bookingCost Original cost of the booking in credits
+ * @param hoursBeforeMatch Hours remaining before the match
+ * @param policy The cancellation policy to apply
+ */
+export function calculateRefundAmount(
+  bookingCost: number,
+  hoursBeforeMatch: number,
+  policy: CancellationPolicy = DEFAULT_CANCELLATION_POLICY
+): number {
+  // If cancelling before the early refund deadline, give full refund percentage
+  if (hoursBeforeMatch >= policy.refundDeadlineHours) {
+    return Math.round((policy.earlyRefundPercent / 100) * bookingCost);
+  }
+  
+  // Otherwise, give standard refund percentage
+  return Math.round((policy.refundPercent / 100) * bookingCost);
+}
+
+/**
+ * Check if a user can cancel a booking based on team's cancellation policy
+ * @param userId User attempting to cancel
+ * @param bookingId Booking to cancel
+ * @param reason Reason for cancellation
+ */
 export async function canCancelBooking(
   userId: number,
-  bookingId: number
+  bookingId: number,
+  reason?: string
 ): Promise<CancellationResult> {
   try {
-    // Get the user
-    const user = await storage.getUser(userId);
-    if (!user) {
-      return { success: false, message: "User not found" };
-    }
-    
     // Get the booking
     const booking = await storage.getBooking(bookingId);
     if (!booking) {
-      return { success: false, message: "Booking not found" };
+      return { 
+        success: false, 
+        message: "Booking not found" 
+      };
     }
     
     // Get the player booking
@@ -42,89 +79,103 @@ export async function canCancelBooking(
     const playerBooking = playerBookings.find(pb => pb.playerId === userId);
     
     if (!playerBooking) {
-      return { success: false, message: "You are not part of this booking" };
+      return { 
+        success: false, 
+        message: "You are not registered for this match" 
+      };
     }
     
-    if (playerBooking.status !== "confirmed") {
-      return { success: false, message: "Booking is not in a confirmed state" };
-    }
+    // Calculate hours before match
+    const now = new Date();
+    const matchTime = new Date(booking.startTime);
+    const hoursBeforeMatch = (matchTime.getTime() - now.getTime()) / (1000 * 60 * 60);
     
-    // Get the team for team-specific cancellation policies
+    // Get the team's cancellation policy
     const team = await storage.getTeam(booking.teamId);
     if (!team) {
-      return { success: false, message: "Team not found" };
+      return { 
+        success: false, 
+        message: "Team not found" 
+      };
+    }
+    
+    // Use team's policy if it exists, otherwise use default
+    const policy = team.cancellationPolicy as CancellationPolicy || DEFAULT_CANCELLATION_POLICY;
+    
+    // Check if it's too late to cancel
+    if (hoursBeforeMatch < policy.minHoursBeforeForCancellation) {
+      return {
+        success: false,
+        message: `Cancellations must be made at least ${policy.minHoursBeforeForCancellation} hours before the match`
+      };
     }
     
     // Check if user has exceeded monthly cancellation limit
-    if (user.cancellationsThisMonth && 
-        user.cancellationsThisMonth >= CANCELLATION_POLICY.MAX_CANCELLATIONS_PER_MONTH) {
-      return { 
-        success: false, 
-        message: `You've reached the maximum ${CANCELLATION_POLICY.MAX_CANCELLATIONS_PER_MONTH} cancellations allowed per month` 
+    // Get all player bookings for the current month that were canceled by this user
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    const playerBookingsThisMonth = await storage.getPlayerBookingsByPlayer(userId);
+    const canceledBookingsThisMonth = playerBookingsThisMonth.filter(pb => {
+      if (pb.status !== 'canceled') return false;
+      
+      const cancelDate = pb.canceledAt ? new Date(pb.canceledAt) : null;
+      return cancelDate && 
+        cancelDate.getMonth() === currentMonth && 
+        cancelDate.getFullYear() === currentYear;
+    });
+    
+    if (canceledBookingsThisMonth.length >= policy.maxCancellationsPerMonth) {
+      return {
+        success: false,
+        message: `You have reached your limit of ${policy.maxCancellationsPerMonth} cancellations this month`
       };
     }
     
-    // Check if it's too close to match time to cancel
-    const now = new Date();
-    const hoursUntilMatch = (booking.startTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+    // Calculate refund amount
+    const bookingCost = booking.creditCost || 0;
+    const refundAmount = calculateRefundAmount(bookingCost, hoursBeforeMatch, policy);
     
-    // Use team-specific cancellation hours if defined, otherwise use default
-    let minCancellationHours = CANCELLATION_POLICY.MIN_CANCELLATION_HOURS;
-    let refundPercentage = CANCELLATION_POLICY.DEFAULT_REFUND_PERCENTAGE;
-    
-    // Check for team-specific cancellation policy
-    if (team.cancellationPolicy) {
-      const teamPolicy = team.cancellationPolicy as any;
-      
-      if (teamPolicy.minCancellationHours !== undefined) {
-        minCancellationHours = teamPolicy.minCancellationHours;
-      }
-      
-      if (teamPolicy.refundPercentage !== undefined) {
-        refundPercentage = teamPolicy.refundPercentage;
-      }
-    }
-    
-    if (hoursUntilMatch < minCancellationHours) {
-      return { 
-        success: false, 
-        message: `Cancellations are not allowed within ${minCancellationHours} hours of the match` 
-      };
-    }
-    
-    // Calculate refund amount (usually 1 credit per player, but team might have custom credit costs)
-    const creditCost = booking.creditCost || 1;
-    const refundAmount = Math.round((refundPercentage / 100) * creditCost);
-    
-    return { 
-      success: true, 
-      message: "Booking can be cancelled", 
-      refundAmount 
+    return {
+      success: true,
+      message: "Cancellation approved",
+      refundAmount,
+      status: "approved"
     };
   } catch (error) {
     console.error("Error checking cancellation eligibility:", error);
-    return { success: false, message: "An error occurred while checking cancellation eligibility" };
+    return {
+      success: false,
+      message: "An error occurred checking cancellation eligibility"
+    };
   }
 }
 
-// Process a booking cancellation
+/**
+ * Process a booking cancellation request
+ * @param userId User attempting to cancel
+ * @param bookingId Booking to cancel
+ * @param reason Reason for cancellation
+ */
 export async function processCancellation(
   userId: number,
   bookingId: number,
   reason?: string
 ): Promise<CancellationResult> {
   try {
-    // First check if cancellation is allowed
-    const cancellationCheck = await canCancelBooking(userId, bookingId);
-    
-    if (!cancellationCheck.success) {
-      return cancellationCheck;
+    // First check if the cancellation is valid
+    const canCancel = await canCancelBooking(userId, bookingId, reason);
+    if (!canCancel.success) {
+      return canCancel;
     }
     
     // Get the booking
     const booking = await storage.getBooking(bookingId);
     if (!booking) {
-      return { success: false, message: "Booking not found" };
+      return { 
+        success: false, 
+        message: "Booking not found" 
+      };
     }
     
     // Get the player booking
@@ -132,72 +183,163 @@ export async function processCancellation(
     const playerBooking = playerBookings.find(pb => pb.playerId === userId);
     
     if (!playerBooking) {
-      return { success: false, message: "You are not part of this booking" };
+      return { 
+        success: false, 
+        message: "You are not registered for this match" 
+      };
     }
     
-    // Update player booking status to cancelled
-    const refundAmount = cancellationCheck.refundAmount || 0;
+    // Update player booking status to canceled
     await storage.updatePlayerBooking(playerBooking.id, {
       status: "canceled",
-      cancellationReason: reason,
-      refundAmount,
+      cancellationReason: reason || "User canceled",
+      refundAmount: canCancel.refundAmount || null,
       canceledAt: new Date()
     });
     
-    // Update booking available slots
+    // Process refund if applicable
+    if (canCancel.refundAmount && canCancel.refundAmount > 0) {
+      await storage.addUserCredits(
+        userId,
+        canCancel.refundAmount,
+        "refund",
+        `Refund for canceling booking #${bookingId}: ${reason || "User canceled"}`
+      );
+    }
+    
+    // Update available slots in the booking
     await storage.updateBooking(bookingId, {
       availableSlots: booking.availableSlots + 1
     });
     
-    // Process refund by creating a credit transaction
-    if (refundAmount > 0) {
-      await storage.createCreditTransaction({
-        userId,
-        amount: refundAmount,
-        type: "refund",
-        bookingId,
-        description: `Refund for cancellation of ${booking.title}`,
-        status: "completed"
-      });
-      
-      // Add credits back to user account
-      await storage.addUserCredits(userId, refundAmount, "refund", `Booking cancellation: ${booking.title}`, null);
-    }
+    // Notify other players if needed (e.g., if this was the organizer)
+    // This would depend on your app's requirements
     
-    // Increment user's cancellation count for the month
-    const user = await storage.getUser(userId);
-    if (user) {
-      // Reset counter if this is the first cancellation of the month
-      const now = new Date();
-      const currentMonth = now.getMonth();
-      const lastResetMonth = user.lastCancellationReset 
-        ? user.lastCancellationReset.getMonth() 
-        : -1;
-      
-      if (currentMonth !== lastResetMonth) {
-        // First cancellation of a new month
-        await storage.updateUser(userId, {
-          cancellationsThisMonth: 1,
-          lastCancellationReset: now
-        });
-      } else {
-        // Increment existing counter
-        await storage.updateUser(userId, {
-          cancellationsThisMonth: (user.cancellationsThisMonth || 0) + 1
-        });
-      }
-      
-      // Send cancellation notification
-      await sendCancellationNotification(userId, booking, refundAmount);
-    }
-    
-    return { 
-      success: true, 
-      message: "Booking successfully cancelled", 
-      refundAmount 
+    return {
+      success: true,
+      message: canCancel.refundAmount && canCancel.refundAmount > 0
+        ? `Cancellation successful. ${canCancel.refundAmount} credits have been refunded.`
+        : "Cancellation successful. No refund was issued.",
+      refundAmount: canCancel.refundAmount,
+      status: "completed"
     };
   } catch (error) {
     console.error("Error processing cancellation:", error);
-    return { success: false, message: "An error occurred while processing cancellation" };
+    return {
+      success: false,
+      message: "An error occurred processing your cancellation"
+    };
+  }
+}
+
+/**
+ * Cancel an entire booking/match (typically by team owner)
+ * @param userId User attempting to cancel (should be team owner or admin)
+ * @param bookingId Booking to cancel
+ * @param reason Reason for cancellation
+ */
+export async function cancelEntireBooking(
+  userId: number,
+  bookingId: number,
+  reason: string
+): Promise<CancellationResult> {
+  try {
+    // Get the booking
+    const booking = await storage.getBooking(bookingId);
+    if (!booking) {
+      return { 
+        success: false, 
+        message: "Booking not found" 
+      };
+    }
+    
+    // Get the team
+    const team = await storage.getTeam(booking.teamId);
+    if (!team) {
+      return { 
+        success: false, 
+        message: "Team not found" 
+      };
+    }
+    
+    // Check if user is authorized (team owner or admin)
+    const user = await storage.getUser(userId);
+    if (!user) {
+      return { 
+        success: false, 
+        message: "User not found" 
+      };
+    }
+    
+    const isTeamOwner = team.ownerId === userId;
+    const isAdmin = user.role === "admin";
+    
+    if (!isTeamOwner && !isAdmin) {
+      return {
+        success: false,
+        message: "Only team owners or administrators can cancel entire bookings"
+      };
+    }
+    
+    // Get all player bookings for this match
+    const playerBookings = await storage.getPlayerBookingsByBooking(bookingId);
+    
+    // Process refunds for all players
+    // Use team's policy if it exists, otherwise use default
+    const policy = team.cancellationPolicy as CancellationPolicy || DEFAULT_CANCELLATION_POLICY;
+    
+    // Calculate hours before match for refund calculation
+    const now = new Date();
+    const matchTime = new Date(booking.startTime);
+    const hoursBeforeMatch = (matchTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+    
+    // Refund all players (full refund for team owner cancellation)
+    for (const pb of playerBookings) {
+      // Skip if already canceled
+      if (pb.status === "canceled") continue;
+      
+      const bookingCost = booking.creditCost || 0;
+      // For team owner cancellations, always issue full refund
+      const refundAmount = bookingCost;
+      
+      // Update player booking status
+      await storage.updatePlayerBooking(pb.id, {
+        status: "canceled",
+        cancellationReason: `Team owner canceled: ${reason}`,
+        refundAmount: refundAmount,
+        canceledAt: new Date()
+      });
+      
+      // Process refund
+      if (refundAmount > 0) {
+        await storage.addUserCredits(
+          pb.playerId,
+          refundAmount,
+          "refund",
+          `Refund for match cancellation by team owner: ${reason}`
+        );
+      }
+    }
+    
+    // Mark booking as canceled
+    await storage.updateBooking(bookingId, {
+      status: "canceled",
+      cancelReason: reason
+    });
+    
+    // Send notifications to all affected players
+    await sendMatchCanceledNotification(bookingId);
+    
+    return {
+      success: true,
+      message: "Booking successfully canceled and all players refunded",
+      status: "completed"
+    };
+  } catch (error) {
+    console.error("Error canceling entire booking:", error);
+    return {
+      success: false,
+      message: "An error occurred canceling the booking"
+    };
   }
 }

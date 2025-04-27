@@ -10,9 +10,10 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Calendar, Download, Users, ListChecks } from "lucide-react";
+import { Calendar, Download, Users, ListChecks, PlusCircle } from "lucide-react";
 import { TeamSelection } from "./team-selection";
 import { Booking, User } from "@shared/schema";
+import { BookingFormPlayer, PlayerBookingFormData } from "./booking-form-player";
 
 interface BookingDetailsModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export function BookingDetailsModal({ isOpen, onClose, booking, onEnterStats }: 
   const { toast } = useToast();
   const [isJoining, setIsJoining] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [activeTab, setActiveTab] = useState("details");
   
   const { data: attendees, isLoading } = useQuery({
     queryKey: [`/api/bookings/${booking?.id}/players`],
@@ -106,8 +108,8 @@ export function BookingDetailsModal({ isOpen, onClose, booking, onEnterStats }: 
           <DialogTitle className="text-lg font-heading font-medium text-gray-900 dark:text-gray-100">Session Details</DialogTitle>
         </DialogHeader>
         
-        <Tabs defaultValue="details" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
+        <Tabs defaultValue="details" className="w-full" value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="details" className="flex items-center">
               <ListChecks className="w-4 h-4 mr-2" />
               Details
@@ -115,6 +117,10 @@ export function BookingDetailsModal({ isOpen, onClose, booking, onEnterStats }: 
             <TabsTrigger value="teams" className="flex items-center">
               <Users className="w-4 h-4 mr-2" />
               Team Selection
+            </TabsTrigger>
+            <TabsTrigger value="join" className="flex items-center">
+              <PlusCircle className="w-4 h-4 mr-2" />
+              Join Session
             </TabsTrigger>
           </TabsList>
           
@@ -195,6 +201,49 @@ export function BookingDetailsModal({ isOpen, onClose, booking, onEnterStats }: 
               />
             )}
           </TabsContent>
+
+          <TabsContent value="join" className="space-y-4">
+            {!isPastBooking && booking.availableSlots > 0 && !isUserAttending && (
+              <BookingFormPlayer 
+                booking={booking}
+                onSubmit={handlePlayerJoin}
+                onCancel={onClose}
+                isPending={isJoining}
+              />
+            )}
+            {!isPastBooking && booking.availableSlots === 0 && !isUserAttending && (
+              <div className="p-6 text-center">
+                <p className="text-gray-600 dark:text-gray-400">This session is fully booked.</p>
+                <p className="mt-2 text-sm text-gray-500">Check back later or join another session.</p>
+              </div>
+            )}
+            {!isPastBooking && isUserAttending && (
+              <div className="p-6 text-center">
+                <p className="text-green-600 dark:text-green-400">You are already registered for this session.</p>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={handleLeaveSession}
+                  disabled={isLeaving}
+                  className="mt-4"
+                >
+                  {isLeaving ? (
+                    <>
+                      <span className="animate-spin mr-2 h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full"></span>
+                      Leaving...
+                    </>
+                  ) : (
+                    <>Leave Session</>
+                  )}
+                </Button>
+              </div>
+            )}
+            {isPastBooking && (
+              <div className="p-6 text-center">
+                <p className="text-gray-600 dark:text-gray-400">This session has already taken place.</p>
+              </div>
+            )}
+          </TabsContent>
           
           <div className="mt-4">
             <DialogFooter className="flex flex-col space-y-2 sm:space-y-0">
@@ -220,18 +269,10 @@ export function BookingDetailsModal({ isOpen, onClose, booking, onEnterStats }: 
                   booking.availableSlots > 0 && (
                     <Button 
                       type="button" 
-                      onClick={handleJoinSession}
-                      disabled={isJoining}
+                      onClick={() => setActiveTab("join")}
                       className="w-full sm:w-auto"
                     >
-                      {isJoining ? (
-                        <>
-                          <span className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
-                          Joining...
-                        </>
-                      ) : (
-                        <>Join Session</>
-                      )}
+                      Join Session
                     </Button>
                   )
                 )

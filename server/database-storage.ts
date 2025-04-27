@@ -2,8 +2,9 @@ import {
   User, InsertUser, Team, InsertTeam, Booking, InsertBooking,
   PlayerBooking, InsertPlayerBooking, MatchStats, InsertMatchStats,
   PlayerStats, InsertPlayerStats, Achievement, PlayerAchievement,
+  CreditTransaction, InsertCreditTransaction,
   users, teams, bookings, playerBookings, matchStats, playerStats,
-  achievements, playerAchievements
+  achievements, playerAchievements, creditTransactions
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -235,5 +236,118 @@ export class DatabaseStorage implements IStorage {
       console.error("Error adding player achievement:", error);
       return false;
     }
+  }
+
+  // Credits and Transactions
+  async getUserCredits(userId: number): Promise<number> {
+    const user = await this.getUser(userId);
+    if (!user) return 0;
+    return user.credits || 0;
+  }
+
+  async addUserCredits(userId: number, amount: number, type: string, description?: string, teamOwnerId?: number): Promise<User> {
+    // Begin transaction
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+
+    const currentCredits = user.credits || 0;
+    const updatedUser = await this.updateUser(userId, { credits: currentCredits + amount });
+    
+    if (!updatedUser) {
+      throw new Error(`Failed to update user ${userId} with credits`);
+    }
+
+    // Create a transaction record
+    await this.createCreditTransaction({
+      userId,
+      amount,
+      type,
+      description: description || `Credit adjustment: ${type}`,
+      teamOwnerId,
+      status: "completed"
+    });
+
+    return updatedUser;
+  }
+
+  async useUserCredits(userId: number, amount: number, bookingId: number, description?: string): Promise<boolean> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+
+    const currentCredits = user.credits || 0;
+    if (currentCredits < amount) {
+      return false; // Not enough credits
+    }
+
+    // Deduct credits (negative amount)
+    await this.updateUser(userId, { credits: currentCredits - amount });
+
+    // Create a transaction record with negative amount to indicate usage
+    await this.createCreditTransaction({
+      userId,
+      amount: -amount,
+      type: "booking",
+      bookingId,
+      description: description || `Booking payment: ID ${bookingId}`,
+      status: "completed"
+    });
+
+    // Find the team owner to credit them
+    const booking = await this.getBooking(bookingId);
+    if (booking) {
+      const team = await this.getTeam(booking.teamId);
+      if (team) {
+        // Create a transaction record for the team owner (crediting them)
+        await this.createCreditTransaction({
+          userId: team.ownerId,
+          amount: amount, // Positive amount for the team owner
+          type: "booking_payment",
+          bookingId,
+          description: `Payment for booking ID ${bookingId}`,
+          teamOwnerId: team.ownerId,
+          status: "completed"
+        });
+
+        // Add credits to the team owner
+        const teamOwner = await this.getUser(team.ownerId);
+        if (teamOwner) {
+          const ownerCredits = teamOwner.credits || 0;
+          await this.updateUser(team.ownerId, { credits: ownerCredits + amount });
+        }
+      }
+    }
+
+    return true;
+  }
+
+  async getTransactionsByUser(userId: number): Promise<CreditTransaction[]> {
+    return await db.select()
+      .from(creditTransactions)
+      .where(eq(creditTransactions.userId, userId))
+      .orderBy(creditTransactions.createdAt);
+  }
+
+  async getTransactionsByTeamOwner(teamOwnerId: number): Promise<CreditTransaction[]> {
+    return await db.select()
+      .from(creditTransactions)
+      .where(eq(creditTransactions.teamOwnerId, teamOwnerId))
+      .orderBy(creditTransactions.createdAt);
+  }
+
+  async createCreditTransaction(transaction: InsertCreditTransaction): Promise<CreditTransaction> {
+    const [creditTransaction] = await db.insert(creditTransactions).values(transaction).returning();
+    return creditTransaction;
+  }
+
+  async updateTransactionStatus(id: number, status: string): Promise<CreditTransaction | undefined> {
+    const [transaction] = await db.update(creditTransactions)
+      .set({ status })
+      .where(eq(creditTransactions.id, id))
+      .returning();
+    return transaction;
   }
 }

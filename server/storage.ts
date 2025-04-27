@@ -1,8 +1,9 @@
 import { 
-  users, teams, bookings, playerBookings, matchStats, playerStats, achievements, playerAchievements,
+  users, teams, bookings, playerBookings, matchStats, playerStats, achievements, playerAchievements, creditTransactions,
   type User, type InsertUser, type Team, type InsertTeam, type Booking, type InsertBooking,
   type PlayerBooking, type InsertPlayerBooking, type MatchStats, type InsertMatchStats,
-  type PlayerStats, type InsertPlayerStats, type Achievement, type PlayerAchievement
+  type PlayerStats, type InsertPlayerStats, type Achievement, type PlayerAchievement,
+  type CreditTransaction, type InsertCreditTransaction
 } from "@shared/schema";
 
 export interface IStorage {
@@ -77,6 +78,7 @@ export class MemStorage implements IStorage {
   private playerStats: Map<number, PlayerStats>;
   private achievements: Map<number, Achievement>;
   private playerAchievements: Map<number, PlayerAchievement>;
+  private creditTransactions: Map<number, CreditTransaction>;
   
   private userIdCounter: number;
   private teamIdCounter: number;
@@ -86,6 +88,7 @@ export class MemStorage implements IStorage {
   private playerStatsIdCounter: number;
   private achievementIdCounter: number;
   private playerAchievementIdCounter: number;
+  private creditTransactionIdCounter: number;
 
   constructor() {
     this.users = new Map();
@@ -96,6 +99,7 @@ export class MemStorage implements IStorage {
     this.playerStats = new Map();
     this.achievements = new Map();
     this.playerAchievements = new Map();
+    this.creditTransactions = new Map();
     
     this.userIdCounter = 1;
     this.teamIdCounter = 1;
@@ -105,6 +109,7 @@ export class MemStorage implements IStorage {
     this.playerStatsIdCounter = 1;
     this.achievementIdCounter = 1;
     this.playerAchievementIdCounter = 1;
+    this.creditTransactionIdCounter = 1;
     
     // Add some default achievements
     this.seedAchievements();
@@ -381,19 +386,19 @@ export class MemStorage implements IStorage {
     const playerStats = await this.getPlayerStatsByPlayer(playerId);
     
     // First Goal achievement
-    const totalGoals = playerStats.reduce((sum, stat) => sum + stat.goals, 0);
+    const totalGoals = playerStats.reduce((sum, stat) => sum + (stat.goals || 0), 0);
     if (totalGoals > 0) {
       await this.addPlayerAchievement(playerId, 1);
     }
     
     // Hat-trick Hero achievement
-    const hasHatTrick = playerStats.some(stat => stat.goals >= 3);
+    const hasHatTrick = playerStats.some(stat => (stat.goals || 0) >= 3);
     if (hasHatTrick) {
       await this.addPlayerAchievement(playerId, 2);
     }
     
     // Playmaker achievement
-    const totalAssists = playerStats.reduce((sum, stat) => sum + stat.assists, 0);
+    const totalAssists = playerStats.reduce((sum, stat) => sum + (stat.assists || 0), 0);
     if (totalAssists >= 5) {
       await this.addPlayerAchievement(playerId, 3);
     }
@@ -412,6 +417,119 @@ export class MemStorage implements IStorage {
         break;
       }
     }
+  }
+
+  // Credits and Transactions
+  async getUserCredits(userId: number): Promise<number> {
+    const user = await this.getUser(userId);
+    if (!user) return 0;
+    return user.credits || 0;
+  }
+
+  async addUserCredits(userId: number, amount: number, type: string, description?: string, teamOwnerId?: number): Promise<User> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+
+    const currentCredits = user.credits || 0;
+    const updatedUser = await this.updateUser(userId, { credits: currentCredits + amount });
+    
+    if (!updatedUser) {
+      throw new Error(`Failed to update user ${userId} with credits`);
+    }
+
+    // Create a transaction record
+    await this.createCreditTransaction({
+      userId,
+      amount,
+      type,
+      description: description || `Credit adjustment: ${type}`,
+      teamOwnerId,
+      status: "completed"
+    });
+
+    return updatedUser;
+  }
+
+  async useUserCredits(userId: number, amount: number, bookingId: number, description?: string): Promise<boolean> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+
+    const currentCredits = user.credits || 0;
+    if (currentCredits < amount) {
+      return false; // Not enough credits
+    }
+
+    // Deduct credits (negative amount)
+    await this.updateUser(userId, { credits: currentCredits - amount });
+
+    // Create a transaction record with negative amount to indicate usage
+    await this.createCreditTransaction({
+      userId,
+      amount: -amount,
+      type: "booking",
+      bookingId,
+      description: description || `Booking payment: ID ${bookingId}`,
+      status: "completed"
+    });
+
+    // Find the team owner to credit them
+    const booking = await this.getBooking(bookingId);
+    if (booking) {
+      const team = await this.getTeam(booking.teamId);
+      if (team) {
+        // Create a transaction record for the team owner (crediting them)
+        await this.createCreditTransaction({
+          userId: team.ownerId,
+          amount: amount, // Positive amount for the team owner
+          type: "booking_payment",
+          bookingId,
+          description: `Payment for booking ID ${bookingId}`,
+          teamOwnerId: team.ownerId,
+          status: "completed"
+        });
+
+        // Add credits to the team owner
+        const teamOwner = await this.getUser(team.ownerId);
+        if (teamOwner) {
+          const ownerCredits = teamOwner.credits || 0;
+          await this.updateUser(team.ownerId, { credits: ownerCredits + amount });
+        }
+      }
+    }
+
+    return true;
+  }
+
+  async getTransactionsByUser(userId: number): Promise<CreditTransaction[]> {
+    return Array.from(this.creditTransactions.values())
+      .filter(tx => tx.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async getTransactionsByTeamOwner(teamOwnerId: number): Promise<CreditTransaction[]> {
+    return Array.from(this.creditTransactions.values())
+      .filter(tx => tx.teamOwnerId === teamOwnerId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async createCreditTransaction(transaction: InsertCreditTransaction): Promise<CreditTransaction> {
+    const id = this.creditTransactionIdCounter++;
+    const creditTransaction: CreditTransaction = { ...transaction, id, createdAt: new Date() };
+    this.creditTransactions.set(id, creditTransaction);
+    return creditTransaction;
+  }
+
+  async updateTransactionStatus(id: number, status: string): Promise<CreditTransaction | undefined> {
+    const transaction = this.creditTransactions.get(id);
+    if (!transaction) return undefined;
+    
+    const updatedTransaction = { ...transaction, status };
+    this.creditTransactions.set(id, updatedTransaction);
+    return updatedTransaction;
   }
 }
 

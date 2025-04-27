@@ -32,7 +32,15 @@ export function CreateBookingModal({ isOpen, onClose, selectedDate = new Date() 
         status: "active" // Set the initial status as active
       };
       
-      await apiRequest("POST", "/api/bookings", bookingData);
+      console.log("Sending booking data:", bookingData);
+      
+      const response = await apiRequest("POST", "/api/bookings", bookingData);
+      const responseData = await response.json();
+      
+      if (!response.ok) {
+        console.error("Server returned error:", responseData);
+        throw new Error(responseData.message || "Failed to create booking");
+      }
       
       toast({
         title: "Booking Created",

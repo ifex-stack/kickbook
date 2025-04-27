@@ -16,7 +16,8 @@ const bookingFormSchema = z.object({
   startTime: z.string().min(1, "Start time is required"),
   endTime: z.string().min(1, "End time is required"),
   totalSlots: z.number().min(2, "Must have at least 2 slots"),
-  isRecurring: z.boolean().optional(),
+  isRecurring: z.boolean().optional().default(false),
+  status: z.string().optional().default("active"),
 });
 
 export type BookingFormData = z.infer<typeof bookingFormSchema>;
@@ -48,6 +49,7 @@ export function BookingFormAdmin({ onSubmit, onCancel, selectedDate = new Date()
       endTime: format(defaultEndTime, "yyyy-MM-dd'T'HH:mm"),
       totalSlots: getDefaultSlots("7-a-side"),
       isRecurring: false,
+      status: "active"
     }
   });
   

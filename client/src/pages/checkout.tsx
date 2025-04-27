@@ -150,7 +150,7 @@ export default function Checkout() {
     variables: {
       colorPrimary: '#0070f3',
     },
-  };
+  } as const;
   const options = {
     clientSecret,
     appearance,

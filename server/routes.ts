@@ -22,7 +22,7 @@ if (!process.env.STRIPE_SECRET_KEY) {
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: "2023-10-16",
+  apiVersion: "2022-11-15", // Use a supported API version
 });
 import MemoryStore from "memorystore";
 
@@ -296,8 +296,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
-        const { password, ...userWithoutPassword } = existingUser;
-        return res.json(userWithoutPassword);
+        if (existingUser) {
+          const { password, ...userWithoutPassword } = existingUser;
+          return res.json(userWithoutPassword);
+        }
+        return res.status(500).json({ message: "Error updating user" });
       }
       
       // Create new user
@@ -1002,6 +1005,239 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
   }
+
+  // Stripe payment routes
+  app.post("/api/create-payment-intent", requireAuth, async (req, res) => {
+    try {
+      const { amount } = req.body;
+      
+      if (!amount) {
+        return res.status(400).json({ message: "Amount is required" });
+      }
+      
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: "usd",
+      });
+      
+      res.json({ clientSecret: paymentIntent.client_secret });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error creating payment intent: " + error.message });
+    }
+  });
+
+  // Subscription management routes
+  app.post("/api/get-or-create-subscription", requireAuth, async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const user = req.user as any;
+      const { priceId } = req.body;
+
+      if (!priceId) {
+        return res.status(400).json({ message: "Price ID is required" });
+      }
+
+      // If user already has a subscription, retrieve it
+      if (user.stripeSubscriptionId) {
+        try {
+          const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+          
+          // Return existing subscription info
+          return res.json({
+            subscriptionId: subscription.id,
+            clientSecret: subscription.latest_invoice?.payment_intent?.client_secret,
+          });
+        } catch (error) {
+          console.error("Error retrieving subscription:", error);
+          // Continue to create a new subscription if the existing one can't be retrieved
+        }
+      }
+      
+      if (!user.email) {
+        return res.status(400).json({ message: "User email is required" });
+      }
+
+      try {
+        // Create or get Stripe customer
+        let customerId = user.stripeCustomerId;
+        
+        if (!customerId) {
+          const customer = await stripe.customers.create({
+            email: user.email,
+            name: user.name || user.username,
+          });
+          customerId = customer.id;
+        }
+
+        // Create subscription
+        const subscription = await stripe.subscriptions.create({
+          customer: customerId,
+          items: [{
+            price: priceId,
+          }],
+          payment_behavior: 'default_incomplete',
+          expand: ['latest_invoice.payment_intent'],
+        });
+
+        // Update user with Stripe info
+        await storage.updateUserStripeInfo(user.id, customerId, subscription.id);
+  
+        // Return subscription info for frontend
+        res.json({
+          subscriptionId: subscription.id,
+          clientSecret: subscription.latest_invoice?.payment_intent?.client_secret,
+        });
+      } catch (error: any) {
+        return res.status(400).json({ error: { message: error.message } });
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: "Error processing subscription: " + error.message });
+    }
+  });
+
+  // Retrieve subscription details
+  app.get("/api/subscription", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      
+      if (!user.stripeSubscriptionId) {
+        return res.json({ subscription: "basic" });
+      }
+
+      try {
+        const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+        
+        // Map subscription status to plan name
+        let plan = "basic";
+        
+        // Extract the price ID from the subscription
+        const priceId = subscription.items.data[0]?.price.id;
+        
+        // Map price IDs to plan names
+        if (priceId) {
+          if (priceId.includes("pro")) {
+            plan = "pro";
+          } else if (priceId.includes("enterprise")) {
+            plan = "enterprise";
+          }
+        }
+        
+        res.json({ 
+          subscription: plan,
+          status: subscription.status,
+          currentPeriodEnd: new Date(subscription.current_period_end * 1000)
+        });
+      } catch (error) {
+        console.error("Error retrieving subscription:", error);
+        return res.json({ subscription: "basic" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: "Error retrieving subscription: " + error.message });
+    }
+  });
+
+  // Handle webhook events from Stripe
+  app.post("/api/webhook", express.raw({ type: 'application/json' }), async (req, res) => {
+    const sig = req.headers['stripe-signature'] as string;
+    
+    let event;
+    
+    try {
+      // Verify webhook signature
+      if (process.env.STRIPE_WEBHOOK_SECRET) {
+        event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+      } else {
+        // For development without webhook signature verification
+        event = JSON.parse(req.body.toString());
+      }
+      
+      // Handle specific events
+      switch (event.type) {
+        case 'checkout.session.completed':
+          // Payment was successful, update user subscription
+          const session = event.data.object;
+          if (session.customer) {
+            // Find user by customer ID and update their subscription
+            // In a real app, you'd need to store metadata to identify the user
+            console.log('Checkout session completed:', session);
+          }
+          break;
+          
+        case 'invoice.payment_succeeded':
+          // Handle successful subscription payment
+          const invoice = event.data.object;
+          console.log('Invoice payment succeeded:', invoice);
+          break;
+          
+        case 'customer.subscription.deleted':
+          // Handle subscription cancelation
+          const subscription = event.data.object;
+          console.log('Subscription deleted:', subscription);
+          // Find user by subscription ID and update their status
+          break;
+          
+        default:
+          console.log(`Unhandled event type ${event.type}`);
+      }
+      
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error('Webhook error:', error.message);
+      res.status(400).send(`Webhook Error: ${error.message}`);
+    }
+  });
+
+  app.get("/api/teams/:id/billing", requireAuth, async (req, res) => {
+    try {
+      const teamId = parseInt(req.params.id);
+      const team = await storage.getTeam(teamId);
+      
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      
+      const user = req.user as any;
+      
+      // Ensure user is the admin of the team
+      if (user.role !== "admin" || user.teamId !== teamId) {
+        return res.status(403).json({ message: "Not authorized to view billing" });
+      }
+      
+      // Get team owner
+      const owner = await storage.getUser(team.ownerId);
+      
+      if (!owner || !owner.stripeCustomerId) {
+        return res.json([]);
+      }
+      
+      try {
+        // Get invoices from Stripe
+        const invoices = await stripe.invoices.list({
+          customer: owner.stripeCustomerId,
+          limit: 10,
+        });
+        
+        // Format invoices for response
+        const billingHistory = invoices.data.map(invoice => ({
+          id: invoice.id,
+          date: new Date(invoice.created * 1000).toISOString().split('T')[0],
+          amount: `$${(invoice.total / 100).toFixed(2)}`,
+          status: invoice.paid ? "Paid" : "Unpaid",
+          description: invoice.lines.data[0]?.description || "Subscription"
+        }));
+        
+        res.json(billingHistory);
+      } catch (error) {
+        console.error("Error retrieving invoices:", error);
+        return res.json([]);
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

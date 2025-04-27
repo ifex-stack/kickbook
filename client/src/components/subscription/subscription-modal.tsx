@@ -1,5 +1,9 @@
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 
 interface SubscriptionPlan {
   name: string;
@@ -9,15 +13,77 @@ interface SubscriptionPlan {
   isPopular?: boolean;
   isCurrent?: boolean;
   ctaText: string;
+  priceId?: string;
   onSelect: () => void;
 }
 
 interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
+  currentPlan?: string;
 }
 
-export function SubscriptionModal({ isOpen, onClose }: SubscriptionModalProps) {
+export function SubscriptionModal({ isOpen, onClose, currentPlan = "basic" }: SubscriptionModalProps) {
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // These price IDs would come from your Stripe dashboard
+  // For this template, we're using placeholder IDs
+  const STRIPE_PRICE_IDS = {
+    pro: "price_pro",
+    enterprise: "price_enterprise"
+  };
+
+  // Handle subscription upgrade
+  const handleSubscription = async (planName: string, priceId?: string) => {
+    if (planName === "basic" || !priceId) {
+      // Free plan, just close the modal
+      toast({
+        title: "Plan Updated",
+        description: "You're now on the Basic plan.",
+      });
+      onClose();
+      return;
+    }
+    
+    setIsProcessing(true);
+    
+    try {
+      // Call our backend to create a subscription
+      const response = await apiRequest("POST", "/api/get-or-create-subscription", {
+        priceId: priceId
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to create subscription");
+      }
+      
+      const data = await response.json();
+      
+      if (data.clientSecret) {
+        // Redirect to checkout page
+        setLocation(`/checkout?clientSecret=${data.clientSecret}&plan=${planName}`);
+      } else {
+        toast({
+          title: "Subscription Active",
+          description: `Your ${planName} plan is already active.`,
+        });
+      }
+      
+      onClose();
+    } catch (error: any) {
+      toast({
+        title: "Subscription Error",
+        description: error.message || "An error occurred while processing your subscription",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const subscriptionPlans: SubscriptionPlan[] = [
     {
       name: "Basic",
@@ -28,11 +94,10 @@ export function SubscriptionModal({ isOpen, onClose }: SubscriptionModalProps) {
         "Core booking features",
         "Email support"
       ],
-      isCurrent: true,
-      ctaText: "Current Plan",
+      isCurrent: currentPlan === "basic",
+      ctaText: currentPlan === "basic" ? "Current Plan" : "Downgrade to Basic",
       onSelect: () => {
-        // Already on this plan
-        onClose();
+        handleSubscription("basic");
       }
     },
     {
@@ -47,10 +112,11 @@ export function SubscriptionModal({ isOpen, onClose }: SubscriptionModalProps) {
         "Phone & email support"
       ],
       isPopular: true,
-      ctaText: "Upgrade to Pro",
+      isCurrent: currentPlan === "pro",
+      priceId: STRIPE_PRICE_IDS.pro,
+      ctaText: currentPlan === "pro" ? "Current Plan" : "Upgrade to Pro",
       onSelect: () => {
-        // Handle upgrade to Pro
-        onClose();
+        handleSubscription("pro", STRIPE_PRICE_IDS.pro);
       }
     },
     {
@@ -64,10 +130,11 @@ export function SubscriptionModal({ isOpen, onClose }: SubscriptionModalProps) {
         "White-label branding",
         "Priority support"
       ],
-      ctaText: "Contact Sales",
+      isCurrent: currentPlan === "enterprise",
+      priceId: STRIPE_PRICE_IDS.enterprise,
+      ctaText: currentPlan === "enterprise" ? "Current Plan" : "Upgrade to Enterprise",
       onSelect: () => {
-        // Handle contact sales
-        onClose();
+        handleSubscription("enterprise", STRIPE_PRICE_IDS.enterprise);
       }
     }
   ];

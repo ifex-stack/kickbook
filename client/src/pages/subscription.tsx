@@ -12,7 +12,14 @@ export default function Subscription() {
   const { user } = useAuth();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   
-  // Get team subscription details
+  // Get subscription details
+  const { data: subscriptionData, isLoading: isLoadingSubscription } = useQuery({
+    queryKey: ['/api/subscription'],
+    queryFn: undefined, // Using the default query function from queryClient
+    enabled: !!user,
+  });
+  
+  // Get team details
   const { data: team, isLoading } = useQuery({
     queryKey: [`/api/teams/${user?.teamId}`],
     queryFn: undefined, // Using the default query function from queryClient
@@ -23,7 +30,7 @@ export default function Subscription() {
   const { data: billingHistory, isLoading: isLoadingBilling } = useQuery({
     queryKey: [`/api/teams/${user?.teamId}/billing`],
     queryFn: undefined, // Using the default query function from queryClient
-    enabled: !!user?.teamId,
+    enabled: !!user?.teamId && (subscriptionData?.subscription === "pro" || subscriptionData?.subscription === "enterprise"),
   });
   
   // Plan details

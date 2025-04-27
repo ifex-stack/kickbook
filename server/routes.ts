@@ -6,6 +6,7 @@ import session from "express-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { z } from "zod";
+import Stripe from "stripe";
 import { 
   insertUserSchema, 
   insertTeamSchema, 
@@ -14,6 +15,15 @@ import {
   insertMatchStatsSchema,
   insertPlayerStatsSchema
 } from "@shared/schema";
+
+// Initialize Stripe
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.warn('Missing required Stripe secret: STRIPE_SECRET_KEY');
+}
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+  apiVersion: "2023-10-16",
+});
 import MemoryStore from "memorystore";
 
 export async function registerRoutes(app: Express): Promise<Server> {

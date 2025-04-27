@@ -1,9 +1,10 @@
 import { 
-  users, teams, bookings, playerBookings, matchStats, playerStats, achievements, playerAchievements, creditTransactions, notifications,
+  users, teams, bookings, playerBookings, matchStats, playerStats, achievements, playerAchievements, creditTransactions, notifications, calendarIntegrations,
   type User, type InsertUser, type Team, type InsertTeam, type Booking, type InsertBooking,
   type PlayerBooking, type InsertPlayerBooking, type MatchStats, type InsertMatchStats,
   type PlayerStats, type InsertPlayerStats, type Achievement, type PlayerAchievement,
-  type CreditTransaction, type InsertCreditTransaction, type Notification, type InsertNotification
+  type CreditTransaction, type InsertCreditTransaction, type Notification, type InsertNotification,
+  type CalendarIntegration, type InsertCalendarIntegration
 } from "@shared/schema";
 
 export interface IStorage {
@@ -78,6 +79,13 @@ export interface IStorage {
   getTransactionsByTeamOwner(teamOwnerId: number): Promise<CreditTransaction[]>;
   createCreditTransaction(transaction: InsertCreditTransaction): Promise<CreditTransaction>;
   updateTransactionStatus(id: number, status: string): Promise<CreditTransaction | undefined>;
+  
+  // Calendar Integrations
+  getCalendarIntegration(id: number): Promise<CalendarIntegration | undefined>;
+  getCalendarIntegrationByUser(userId: number, provider: string): Promise<CalendarIntegration | undefined>;
+  createCalendarIntegration(integration: InsertCalendarIntegration): Promise<CalendarIntegration>;
+  updateCalendarIntegration(id: number, update: Partial<CalendarIntegration>): Promise<CalendarIntegration | undefined>;
+  deleteCalendarIntegration(id: number): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -91,6 +99,7 @@ export class MemStorage implements IStorage {
   private playerAchievements: Map<number, PlayerAchievement>;
   private creditTransactions: Map<number, CreditTransaction>;
   private notifications: Map<number, Notification>;
+  private calendarIntegrations: Map<number, CalendarIntegration>;
   
   private userIdCounter: number;
   private teamIdCounter: number;
@@ -102,6 +111,7 @@ export class MemStorage implements IStorage {
   private playerAchievementIdCounter: number;
   private creditTransactionIdCounter: number;
   private notificationIdCounter: number;
+  private calendarIntegrationIdCounter: number;
 
   constructor() {
     this.users = new Map();
@@ -114,6 +124,7 @@ export class MemStorage implements IStorage {
     this.playerAchievements = new Map();
     this.creditTransactions = new Map();
     this.notifications = new Map();
+    this.calendarIntegrations = new Map();
     
     this.userIdCounter = 1;
     this.teamIdCounter = 1;
@@ -125,6 +136,7 @@ export class MemStorage implements IStorage {
     this.playerAchievementIdCounter = 1;
     this.creditTransactionIdCounter = 1;
     this.notificationIdCounter = 1;
+    this.calendarIntegrationIdCounter = 1;
     
     // Add some default achievements
     this.seedAchievements();
@@ -615,6 +627,40 @@ export class MemStorage implements IStorage {
     const updatedTransaction = { ...transaction, status };
     this.creditTransactions.set(id, updatedTransaction);
     return updatedTransaction;
+  }
+  
+  // Calendar Integration methods
+  async getCalendarIntegration(id: number): Promise<CalendarIntegration | undefined> {
+    return this.calendarIntegrations.get(id);
+  }
+  
+  async getCalendarIntegrationByUser(userId: number, provider: string): Promise<CalendarIntegration | undefined> {
+    return Array.from(this.calendarIntegrations.values())
+      .find(integration => integration.userId === userId && integration.provider === provider);
+  }
+  
+  async createCalendarIntegration(integration: InsertCalendarIntegration): Promise<CalendarIntegration> {
+    const id = this.calendarIntegrationIdCounter++;
+    const newIntegration: CalendarIntegration = { 
+      ...integration, 
+      id, 
+      createdAt: new Date() 
+    };
+    this.calendarIntegrations.set(id, newIntegration);
+    return newIntegration;
+  }
+  
+  async updateCalendarIntegration(id: number, update: Partial<CalendarIntegration>): Promise<CalendarIntegration | undefined> {
+    const integration = this.calendarIntegrations.get(id);
+    if (!integration) return undefined;
+    
+    const updatedIntegration = { ...integration, ...update };
+    this.calendarIntegrations.set(id, updatedIntegration);
+    return updatedIntegration;
+  }
+  
+  async deleteCalendarIntegration(id: number): Promise<boolean> {
+    return this.calendarIntegrations.delete(id);
   }
 }
 

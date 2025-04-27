@@ -1662,7 +1662,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/teams/:teamId/invitation', isAuthenticated, async (req, res) => {
+  app.get('/api/teams/:teamId/invitation', requireAuth, async (req, res) => {
     try {
       const teamId = parseInt(req.params.teamId);
       const userId = req.user.id;

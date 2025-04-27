@@ -21,6 +21,7 @@ import {
 import { processCancellation, cancelEntireBooking } from "./services/cancellation-service";
 import { getWeatherForBooking } from "./services/weather-service";
 import { sendNotification, NotificationType } from "./services/notification-service";
+import { calendarService } from "./services/calendar-service";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 

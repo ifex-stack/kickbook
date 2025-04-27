@@ -3,8 +3,10 @@ import {
   PlayerBooking, InsertPlayerBooking, MatchStats, InsertMatchStats,
   PlayerStats, InsertPlayerStats, Achievement, PlayerAchievement,
   CreditTransaction, InsertCreditTransaction, Notification, InsertNotification,
+  CalendarIntegration, InsertCalendarIntegration,
   users, teams, bookings, playerBookings, matchStats, playerStats,
-  achievements, playerAchievements, creditTransactions, notifications
+  achievements, playerAchievements, creditTransactions, notifications,
+  calendarIntegrations
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -550,5 +552,59 @@ export class DatabaseStorage implements IStorage {
       .where(eq(creditTransactions.id, id))
       .returning();
     return transaction;
+  }
+  
+  // Calendar Integration methods
+  async getCalendarIntegration(id: number): Promise<CalendarIntegration | undefined> {
+    const [integration] = await db.select()
+      .from(calendarIntegrations)
+      .where(eq(calendarIntegrations.id, id));
+    return integration;
+  }
+  
+  async getCalendarIntegrationByUser(userId: number, provider: string): Promise<CalendarIntegration | undefined> {
+    const [integration] = await db.select()
+      .from(calendarIntegrations)
+      .where(and(
+        eq(calendarIntegrations.userId, userId),
+        eq(calendarIntegrations.provider, provider)
+      ));
+    return integration;
+  }
+  
+  async createCalendarIntegration(integration: InsertCalendarIntegration): Promise<CalendarIntegration> {
+    try {
+      const [newIntegration] = await db.insert(calendarIntegrations)
+        .values(integration)
+        .returning();
+      return newIntegration;
+    } catch (error) {
+      console.error("Error creating calendar integration:", error);
+      throw new Error("Failed to create calendar integration");
+    }
+  }
+  
+  async updateCalendarIntegration(id: number, update: Partial<CalendarIntegration>): Promise<CalendarIntegration | undefined> {
+    try {
+      const [integration] = await db.update(calendarIntegrations)
+        .set(update)
+        .where(eq(calendarIntegrations.id, id))
+        .returning();
+      return integration;
+    } catch (error) {
+      console.error("Error updating calendar integration:", error);
+      return undefined;
+    }
+  }
+  
+  async deleteCalendarIntegration(id: number): Promise<boolean> {
+    try {
+      const result = await db.delete(calendarIntegrations)
+        .where(eq(calendarIntegrations.id, id));
+      return !!result.rowCount;
+    } catch (error) {
+      console.error("Error deleting calendar integration:", error);
+      return false;
+    }
   }
 }

@@ -2,9 +2,9 @@ import {
   User, InsertUser, Team, InsertTeam, Booking, InsertBooking,
   PlayerBooking, InsertPlayerBooking, MatchStats, InsertMatchStats,
   PlayerStats, InsertPlayerStats, Achievement, PlayerAchievement,
-  CreditTransaction, InsertCreditTransaction,
+  CreditTransaction, InsertCreditTransaction, Notification, InsertNotification,
   users, teams, bookings, playerBookings, matchStats, playerStats,
-  achievements, playerAchievements, creditTransactions
+  achievements, playerAchievements, creditTransactions, notifications
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -371,6 +371,72 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error("Error checking player achievements:", error);
     }
+  }
+
+  // Notifications
+  async getNotifications(userId: number): Promise<Notification[]> {
+    return await db.select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId));
+  }
+
+  async getUnreadNotifications(userId: number): Promise<Notification[]> {
+    return await db.select()
+      .from(notifications)
+      .where(and(
+        eq(notifications.userId, userId),
+        eq(notifications.isRead, false)
+      ));
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [newNotification] = await db.insert(notifications)
+      .values(notification)
+      .returning();
+    return newNotification;
+  }
+
+  async markNotificationAsRead(id: number): Promise<boolean> {
+    try {
+      await db.update(notifications)
+        .set({ isRead: true })
+        .where(eq(notifications.id, id));
+      return true;
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      return false;
+    }
+  }
+
+  async markAllNotificationsAsRead(userId: number): Promise<boolean> {
+    try {
+      await db.update(notifications)
+        .set({ isRead: true })
+        .where(and(
+          eq(notifications.userId, userId),
+          eq(notifications.isRead, false)
+        ));
+      return true;
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      return false;
+    }
+  }
+
+  async deleteNotification(id: number): Promise<boolean> {
+    try {
+      const result = await db.delete(notifications)
+        .where(eq(notifications.id, id));
+      return !!result.rowCount;
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+      return false;
+    }
+  }
+
+  // Get all bookings (used for notification service)
+  async getAllBookings(): Promise<Booking[]> {
+    return await db.select().from(bookings);
   }
 
   // Credits and Transactions

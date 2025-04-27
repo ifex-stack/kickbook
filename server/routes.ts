@@ -28,6 +28,14 @@ if (!process.env.STRIPE_SECRET_KEY) {
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: "2023-10-16", // Use a supported API version
 });
+
+// Authentication middleware
+const isAuthenticated = (req: Request, res: Response, next: NextFunction) => {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ message: "Not authenticated" });
+};
 import MemoryStore from "memorystore";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -1426,6 +1434,258 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error registering user with team:', error);
       res.status(500).json({ message: 'Failed to register user' });
+    }
+  });
+
+  // Credits API endpoints
+  app.get('/api/credits/transactions', requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const transactions = await storage.getTransactionsByUser(userId);
+      res.json(transactions);
+    } catch (error) {
+      console.error('Error fetching credit transactions:', error);
+      res.status(500).json({ message: 'Failed to fetch credit transactions' });
+    }
+  });
+
+  app.post('/api/credits/purchase', requireAuth, async (req, res) => {
+    try {
+      const { amount, paymentMethod } = req.body;
+      
+      if (!amount || amount < 5) {
+        return res.status(400).json({ message: 'Minimum purchase amount is 5 credits' });
+      }
+      
+      if (amount > 1000) {
+        return res.status(400).json({ message: 'Maximum purchase amount is 1000 credits' });
+      }
+      
+      const userId = req.user.id;
+      const pricePerCredit = 1; // $1 per credit
+      const amountInCents = Math.round(amount * pricePerCredit * 100);
+      
+      if (paymentMethod === 'stripe') {
+        // Create a payment intent with Stripe
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amountInCents,
+          currency: 'usd',
+          metadata: {
+            type: 'credit_purchase',
+            userId: userId.toString(),
+            credits: amount.toString()
+          }
+        });
+        
+        // Create a pending transaction
+        await storage.createCreditTransaction({
+          type: 'purchase',
+          amount: amount,
+          userId: userId,
+          status: 'pending',
+          description: `Purchase of ${amount} credits`
+        });
+        
+        res.json({
+          clientSecret: paymentIntent.client_secret,
+          amount: amount
+        });
+      } else {
+        res.status(400).json({ message: 'Invalid payment method' });
+      }
+    } catch (error) {
+      console.error('Error creating credit purchase:', error);
+      res.status(500).json({ message: 'Failed to process credit purchase' });
+    }
+  });
+
+  app.post('/api/credits/webhook', async (req, res) => {
+    const payload = req.body;
+    let event;
+    
+    try {
+      // Verify and construct the webhook event
+      event = stripe.webhooks.constructEvent(
+        payload, 
+        req.headers['stripe-signature'], 
+        process.env.STRIPE_WEBHOOK_SECRET || ''
+      );
+    } catch (error) {
+      console.error('Webhook signature verification failed:', error);
+      return res.status(400).send(`Webhook Error: ${error.message}`);
+    }
+    
+    // Handle different event types
+    if (event.type === 'payment_intent.succeeded') {
+      try {
+        const paymentIntent = event.data.object;
+        const metadata = paymentIntent.metadata;
+        
+        if (metadata.type === 'credit_purchase') {
+          const userId = parseInt(metadata.userId);
+          const credits = parseInt(metadata.credits);
+          
+          // Add credits to the user
+          await storage.addUserCredits(userId, credits, 'purchase', 'Credit purchase successful');
+          
+          // Update related transaction status
+          const transactions = await storage.getTransactionsByUser(userId);
+          const pendingTransaction = transactions.find(
+            tx => tx.type === 'purchase' && tx.amount === credits && tx.status === 'pending'
+          );
+          
+          if (pendingTransaction) {
+            await storage.updateTransactionStatus(pendingTransaction.id, 'completed');
+          }
+        }
+      } catch (error) {
+        console.error('Error processing payment success webhook:', error);
+        return res.status(500).send('Error processing payment success');
+      }
+    } else if (event.type === 'payment_intent.payment_failed') {
+      try {
+        const paymentIntent = event.data.object;
+        const metadata = paymentIntent.metadata;
+        
+        if (metadata.type === 'credit_purchase') {
+          const userId = parseInt(metadata.userId);
+          const credits = parseInt(metadata.credits);
+          
+          // Update transaction status to failed
+          const transactions = await storage.getTransactionsByUser(userId);
+          const pendingTransaction = transactions.find(
+            tx => tx.type === 'purchase' && tx.amount === credits && tx.status === 'pending'
+          );
+          
+          if (pendingTransaction) {
+            await storage.updateTransactionStatus(pendingTransaction.id, 'failed');
+          }
+        }
+      } catch (error) {
+        console.error('Error processing payment failure webhook:', error);
+        return res.status(500).send('Error processing payment failure');
+      }
+    }
+    
+    res.json({ received: true });
+  });
+
+  app.post('/api/credits/use', requireAuth, async (req, res) => {
+    try {
+      const { amount, bookingId, description } = req.body;
+      const userId = req.user.id;
+      
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ message: 'Invalid credit amount' });
+      }
+      
+      if (!bookingId) {
+        return res.status(400).json({ message: 'Booking ID is required' });
+      }
+      
+      // Check if user has enough credits
+      const userCredits = await storage.getUserCredits(userId);
+      
+      if (userCredits < amount) {
+        return res.status(400).json({ message: 'Insufficient credits' });
+      }
+      
+      // Use credits and create transaction
+      const success = await storage.useUserCredits(userId, amount, bookingId, description);
+      
+      if (success) {
+        res.json({ success: true, remainingCredits: userCredits - amount });
+      } else {
+        res.status(500).json({ message: 'Failed to use credits' });
+      }
+    } catch (error) {
+      console.error('Error using credits:', error);
+      res.status(500).json({ message: 'Failed to use credits' });
+    }
+  });
+
+  // Team Invitation API endpoints
+  app.post('/api/teams/join', async (req, res) => {
+    try {
+      const { invitationCode } = req.body;
+      
+      if (!invitationCode) {
+        return res.status(400).json({ message: 'Invitation code is required' });
+      }
+      
+      // Find team by invitation code
+      const teams = await storage.getTeams();
+      const team = teams.find(t => t.invitationCode === invitationCode);
+      
+      if (!team) {
+        return res.status(404).json({ message: 'Invalid invitation code' });
+      }
+      
+      res.json({
+        teamId: team.id,
+        teamName: team.name
+      });
+    } catch (error) {
+      console.error('Error verifying team invitation:', error);
+      res.status(500).json({ message: 'Failed to verify invitation code' });
+    }
+  });
+
+  app.post('/api/teams/:teamId/invitation/regenerate', requireAuth, async (req, res) => {
+    try {
+      const teamId = parseInt(req.params.teamId);
+      const userId = req.user.id;
+      
+      // Check if user is team owner
+      const team = await storage.getTeam(teamId);
+      
+      if (!team) {
+        return res.status(404).json({ message: 'Team not found' });
+      }
+      
+      if (team.ownerId !== userId) {
+        return res.status(403).json({ message: 'Only team owner can regenerate invitation code' });
+      }
+      
+      // Generate new invitation code
+      const invitationCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      
+      // Update team with new invitation code
+      const updatedTeam = await storage.updateTeam(teamId, { invitationCode });
+      
+      res.json({
+        invitationCode: updatedTeam.invitationCode
+      });
+    } catch (error) {
+      console.error('Error regenerating invitation code:', error);
+      res.status(500).json({ message: 'Failed to regenerate invitation code' });
+    }
+  });
+
+  app.get('/api/teams/:teamId/invitation', isAuthenticated, async (req, res) => {
+    try {
+      const teamId = parseInt(req.params.teamId);
+      const userId = req.user.id;
+      
+      // Get team
+      const team = await storage.getTeam(teamId);
+      
+      if (!team) {
+        return res.status(404).json({ message: 'Team not found' });
+      }
+      
+      // Check if user is team owner or member
+      if (team.ownerId !== userId && (!req.user.teamId || req.user.teamId !== teamId)) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+      
+      res.json({
+        teamName: team.name,
+        invitationCode: team.invitationCode
+      });
+    } catch (error) {
+      console.error('Error fetching team invitation:', error);
+      res.status(500).json({ message: 'Failed to fetch team invitation' });
     }
   });
 

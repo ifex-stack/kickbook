@@ -16,6 +16,7 @@ export interface IStorage {
   
   // Teams
   getTeam(id: number): Promise<Team | undefined>;
+  getTeams(): Promise<Team[]>;
   getTeamsByOwner(ownerId: number): Promise<Team[]>;
   createTeam(team: InsertTeam): Promise<Team>;
   updateTeam(id: number, team: Partial<Team>): Promise<Team | undefined>;
@@ -169,6 +170,10 @@ export class MemStorage implements IStorage {
   // Teams
   async getTeam(id: number): Promise<Team | undefined> {
     return this.teams.get(id);
+  }
+
+  async getTeams(): Promise<Team[]> {
+    return Array.from(this.teams.values());
   }
 
   async getTeamsByOwner(ownerId: number): Promise<Team[]> {

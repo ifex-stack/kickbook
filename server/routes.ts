@@ -2024,7 +2024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // If user is team owner, they can cancel the entire booking
       if (team.ownerId === user.id) {
-        const result = await cancelEntireBooking(bookingId, reason);
+        const result = await cancelEntireBooking(user.id, bookingId, reason);
         return res.json(result);
       }
       
@@ -2060,7 +2060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Otherwise fetch and update the weather data
-      const weather = await getWeatherForBooking(booking);
+      const weather = await getWeatherForBooking(bookingId);
       
       if (!weather) {
         return res.status(404).json({ message: "Weather data not available" });

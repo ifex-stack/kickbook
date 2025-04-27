@@ -15,8 +15,12 @@ import {
   insertPlayerBookingSchema, 
   insertMatchStatsSchema,
   insertPlayerStatsSchema,
+  insertNotificationSchema,
   teams as teamSchema
 } from "@shared/schema";
+import { processCancellation, cancelEntireBooking } from "./services/cancellation-service";
+import { getWeatherForBooking } from "./services/weather-service";
+import { sendNotification, NotificationType } from "./services/notification-service";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 
@@ -1935,6 +1939,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Notification routes
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const notifications = await storage.getNotifications(user.id);
+      res.json(notifications);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/notifications/unread", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const notifications = await storage.getUnreadNotifications(user.id);
+      res.json(notifications);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
+    try {
+      const notificationId = parseInt(req.params.id);
+      const success = await storage.markNotificationAsRead(notificationId);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/notifications/read-all", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const success = await storage.markAllNotificationsAsRead(user.id);
+      res.json({ success });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
+    try {
+      const notificationId = parseInt(req.params.id);
+      const success = await storage.deleteNotification(notificationId);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Cancellation routes
+  app.post("/api/bookings/:id/cancel", requireAuth, async (req, res) => {
+    try {
+      const bookingId = parseInt(req.params.id);
+      const user = req.user as any;
+      const { reason } = req.body;
+      
+      if (!reason) {
+        return res.status(400).json({ message: "Cancellation reason is required" });
+      }
+      
+      // Check if the user is the team owner
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      const team = await storage.getTeam(booking.teamId);
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      
+      // If user is team owner, they can cancel the entire booking
+      if (team.ownerId === user.id) {
+        const result = await cancelEntireBooking(bookingId, reason);
+        return res.json(result);
+      }
+      
+      // Otherwise, check if the user has booked this match
+      const playerBookings = await storage.getPlayerBookingsByBooking(bookingId);
+      const userBooking = playerBookings.find(pb => pb.playerId === user.id);
+      
+      if (!userBooking) {
+        return res.status(403).json({ message: "You haven't booked this match" });
+      }
+      
+      // Process individual cancellation
+      const result = await processCancellation(userBooking.id, reason);
+      return res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Weather forecast route
+  app.get("/api/bookings/:id/weather", requireAuth, async (req, res) => {
+    try {
+      const bookingId = parseInt(req.params.id);
+      const booking = await storage.getBooking(bookingId);
+      
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      // If weather data already exists in the booking, return it
+      if (booking.weatherData) {
+        return res.json(booking.weatherData);
+      }
+      
+      // Otherwise fetch and update the weather data
+      const weather = await getWeatherForBooking(booking);
+      
+      if (!weather) {
+        return res.status(404).json({ message: "Weather data not available" });
+      }
+      
+      res.json(weather);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
   const httpServer = createServer(app);
   return httpServer;
 }

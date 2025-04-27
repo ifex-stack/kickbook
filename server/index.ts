@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { runMigrations } from "./db-migration";
+import { scheduleMatchReminders } from "./services/notification-service";
+import { scheduleWeatherUpdates } from "./services/weather-service";
 
 const app = express();
 app.use(express.json());
@@ -47,6 +49,19 @@ app.use((req, res, next) => {
   }
 
   const server = await registerRoutes(app);
+
+  // Initialize background services
+  try {
+    // Initialize notification service for match reminders
+    await scheduleMatchReminders();
+    log("Match reminder service initialized");
+
+    // Initialize weather forecast service
+    scheduleWeatherUpdates();
+    log("Weather forecast service initialized");
+  } catch (error) {
+    log("Error initializing background services: " + error);
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

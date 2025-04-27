@@ -52,7 +52,7 @@ export async function sendNotification(
       type,
       metadata: metadata || {},
       isRead: false
-    };
+    } as InsertNotification; // Type assertion to fix metadata field compatibility
 
     await storage.createNotification(notification);
     return true;

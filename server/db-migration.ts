@@ -52,9 +52,17 @@ export async function runMigrations() {
         type TEXT NOT NULL,
         booking_id INTEGER,
         is_read BOOLEAN DEFAULT FALSE,
+        metadata JSONB,
         created_at TIMESTAMP DEFAULT NOW() NOT NULL
       )
     `);
+    
+    // Add metadata column to notifications table if it doesn't exist
+    await db.execute(sql`
+      ALTER TABLE notifications
+      ADD COLUMN IF NOT EXISTS metadata JSONB
+    `);
+    
     console.log("✓ Notifications table created (if not exists)");
 
     // Update credit_transactions table type column

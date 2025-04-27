@@ -111,6 +111,7 @@ export const notifications = pgTable("notifications", {
   type: text("type").notNull(), // booking_confirmation, match_reminder, cancellation, etc.
   bookingId: integer("booking_id"),
   isRead: boolean("is_read").default(false),
+  metadata: json("metadata"), // For storing additional data like achievementId, teamId, etc.
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

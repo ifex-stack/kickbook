@@ -24,6 +24,7 @@ import TermsOfService from "@/pages/terms-of-service";
 import GDPR from "@/pages/gdpr";
 import Credits from "@/pages/credits";
 import Notifications from "@/pages/notifications";
+import BookingTest from "@/pages/booking-test";
 
 function Router() {
   return (
@@ -46,6 +47,7 @@ function Router() {
         <Route path="/more" component={More} />
         <Route path="/credits" component={Credits} />
         <Route path="/notifications" component={Notifications} />
+        <Route path="/booking-test" component={BookingTest} />
         
         {/* Legal Pages */}
         <Route path="/privacy-policy" component={PrivacyPolicy} />

@@ -398,17 +398,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/bookings", requireAdmin, async (req, res) => {
     try {
+      console.log("Received booking data:", JSON.stringify(req.body, null, 2));
+      console.log("Required schema:", insertBookingSchema);
+      
       const parseResult = insertBookingSchema.safeParse(req.body);
       
       if (!parseResult.success) {
+        console.error("Validation error details:", parseResult.error.errors);
         return res.status(400).json({ 
           message: "Invalid booking data", 
-          errors: parseResult.error.errors 
+          errors: parseResult.error.errors,
+          receivedData: req.body
         });
       }
       
       const bookingData = parseResult.data;
       const user = req.user as any;
+      
+      console.log("User data:", user);
       
       if (!user.teamId) {
         return res.status(400).json({ message: "User not associated with a team" });
@@ -417,9 +424,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set team id from user
       bookingData.teamId = user.teamId;
       
+      console.log("Final booking data to be saved:", bookingData);
+      
       const newBooking = await storage.createBooking(bookingData);
+      console.log("Booking created successfully:", newBooking);
       res.status(201).json(newBooking);
     } catch (error: any) {
+      console.error("Error creating booking:", error);
       res.status(500).json({ message: error.message });
     }
   });

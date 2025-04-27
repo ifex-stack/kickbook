@@ -21,40 +21,91 @@ export function CreateBookingModal({ isOpen, onClose, selectedDate = new Date() 
   // Only admins or owners can create and pre-populate sessions
   const isAdminOrOwner = user?.role === UserRole.ADMIN || user?.role === UserRole.OWNER;
 
+  // Get current user data to ensure we have the team ID
+  const fetchUserData = async () => {
+    try {
+      const response = await fetch("/api/auth/me", {
+        credentials: "include"
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to get user data");
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      throw error;
+    }
+  };
+
   const onSubmit = async (data: BookingFormData) => {
     try {
       setIsSubmitting(true);
+      
+      // Get current user data to ensure we're authenticated and have a team ID
+      const userData = await fetchUserData();
+      console.log("User data:", userData);
+      
+      if (!userData.teamId) {
+        throw new Error("User not associated with a team");
+      }
+      
       const bookingData = {
         ...data,
         startTime: new Date(data.startTime).toISOString(),
         endTime: new Date(data.endTime).toISOString(),
         availableSlots: data.totalSlots,
-        status: "active" // Set the initial status as active
+        status: "active", // Set the initial status as active
+        teamId: userData.teamId,
+        creditCost: 1, // Default credit cost
+        cancelReason: null,
+        weatherData: null
       };
       
       console.log("Sending booking data:", bookingData);
       
-      const response = await apiRequest("POST", "/api/bookings", bookingData);
-      const responseData = await response.json();
-      
-      if (!response.ok) {
-        console.error("Server returned error:", responseData);
-        throw new Error(responseData.message || "Failed to create booking");
+      try {
+        const response = await fetch("/api/bookings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(bookingData),
+          credentials: "include"
+        });
+        
+        const responseText = await response.text();
+        console.log("Response status:", response.status);
+        console.log("Response text:", responseText);
+        
+        if (!response.ok) {
+          let errorData;
+          try {
+            errorData = JSON.parse(responseText);
+            console.error("Server returned error:", errorData);
+            throw new Error(errorData.message || "Failed to create booking");
+          } catch (parseError) {
+            console.error("Error parsing error response:", parseError);
+            throw new Error(`${response.status}: ${responseText}`);
+          }
+        }
+        
+        toast({
+          title: "Booking Created",
+          description: "New session has been added to the calendar",
+        });
+        
+        queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+        setIsSubmitting(false);
+        onClose();
+      } catch (fetchError) {
+        console.error("Fetch error:", fetchError);
+        throw fetchError;
       }
-      
-      toast({
-        title: "Booking Created",
-        description: "New session has been added to the calendar",
-      });
-      
-      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-      setIsSubmitting(false);
-      onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating booking:", error);
       toast({
         title: "Error",
-        description: "Failed to create booking. Please try again.",
+        description: error.message || "Failed to create booking. Please try again.",
         variant: "destructive",
       });
       setIsSubmitting(false);

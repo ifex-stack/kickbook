@@ -13,6 +13,7 @@ import { useTheme } from "@/lib/theme";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
+import { CalendarIntegration } from "@/components/settings/calendar-integration";
 
 export default function Settings() {
   const { user, logout } = useAuth();
@@ -202,6 +203,12 @@ export default function Settings() {
                 className="rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary-DEFAULT py-3 px-6"
               >
                 Notifications
+              </TabsTrigger>
+              <TabsTrigger 
+                value="calendar" 
+                className="rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary-DEFAULT py-3 px-6"
+              >
+                Calendar
               </TabsTrigger>
               <TabsTrigger 
                 value="appearance" 
@@ -466,6 +473,11 @@ export default function Settings() {
                   )}
                 </Button>
               </div>
+            </TabsContent>
+            
+            <TabsContent value="calendar" className="p-6 space-y-6 focus:outline-none">
+              {/* Import CalendarIntegration component */}
+              {user && <CalendarIntegration userId={user.id} />}
             </TabsContent>
             
             <TabsContent value="appearance" className="p-6 space-y-6 focus:outline-none">

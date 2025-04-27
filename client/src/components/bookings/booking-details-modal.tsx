@@ -9,6 +9,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/components/auth/auth-provider";
+import { Calendar, Download } from "lucide-react";
 
 interface BookingDetailsModalProps {
   isOpen: boolean;
@@ -152,6 +153,18 @@ export function BookingDetailsModal({ isOpen, onClose, booking, onEnterStats }: 
             ) : (
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center">No attendees yet</p>
             )}
+          </div>
+          
+          <div className="flex justify-end">
+            <a 
+              href={`/api/calendar/download/${booking.id}`} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center text-sm text-primary-DEFAULT hover:text-primary-dark transition-colors"
+            >
+              <Calendar className="w-4 h-4 mr-1" />
+              Add to calendar
+            </a>
           </div>
           
           <DialogFooter className="flex flex-col space-y-2 sm:space-y-0">

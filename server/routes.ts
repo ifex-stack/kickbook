@@ -7,14 +7,18 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { z } from "zod";
 import Stripe from "stripe";
+import bcrypt from "bcrypt";
 import { 
   insertUserSchema, 
   insertTeamSchema, 
   insertBookingSchema,
   insertPlayerBookingSchema, 
   insertMatchStatsSchema,
-  insertPlayerStatsSchema
+  insertPlayerStatsSchema,
+  teams as teamSchema
 } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import { db } from "./db";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -1272,6 +1276,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error: any) {
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Credits API
+  app.get('/api/credits', async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    try {
+      const userId = req.user.id;
+      const credits = await storage.getUserCredits(userId);
+      const transactions = await storage.getTransactionsByUser(userId);
+
+      res.json({
+        credits,
+        transactions
+      });
+    } catch (error) {
+      console.error('Error fetching credits:', error);
+      res.status(500).json({ message: 'Failed to fetch credits information' });
+    }
+  });
+
+  app.post('/api/credits/add', async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const { amount } = req.body;
+    if (!amount || amount < 5) {
+      return res.status(400).json({ message: 'Invalid amount. Minimum amount is 5 credits.' });
+    }
+
+    try {
+      const userId = req.user.id;
+      // In a real application, you would process a payment here with Stripe
+      // For this demo, we'll just add the credits directly
+      const user = await storage.addUserCredits(userId, amount, 'purchase', 'Credit purchase');
+      
+      res.json({
+        message: 'Credits added successfully',
+        credits: user.credits
+      });
+    } catch (error) {
+      console.error('Error adding credits:', error);
+      res.status(500).json({ message: 'Failed to add credits' });
+    }
+  });
+
+  // Team Invitation API
+  app.get('/api/teams/:id/invitation', requireAuth, async (req, res) => {
+    try {
+      const teamId = parseInt(req.params.id);
+      const team = await storage.getTeam(teamId);
+      
+      if (!team) {
+        return res.status(404).json({ message: 'Team not found' });
+      }
+      
+      const user = req.user as any;
+      
+      // Ensure user is admin of the team
+      if (team.ownerId !== user.id) {
+        return res.status(403).json({ message: 'Not authorized to manage team invitations' });
+      }
+      
+      // Generate invitation code if it doesn't exist
+      if (!team.invitationCode) {
+        const invitationCode = Math.random().toString(36).substring(2, 12).toUpperCase();
+        await storage.updateTeam(teamId, { invitationCode });
+        team.invitationCode = invitationCode;
+      }
+      
+      res.json({ 
+        teamId: team.id,
+        teamName: team.name,
+        invitationCode: team.invitationCode
+      });
+    } catch (error) {
+      console.error('Error getting team invitation:', error);
+      res.status(500).json({ message: 'Failed to get team invitation' });
+    }
+  });
+
+  app.post('/api/teams/join', async (req, res) => {
+    const { invitationCode } = req.body;
+    
+    if (!invitationCode) {
+      return res.status(400).json({ message: 'Invitation code is required' });
+    }
+    
+    try {
+      // Find team by invitation code
+      const teams = await db.select().from(teamSchema).where(eq(teamSchema.invitationCode, invitationCode));
+      const team = teams[0];
+      
+      if (!team) {
+        return res.status(404).json({ message: 'Invalid invitation code' });
+      }
+      
+      res.json({ 
+        teamId: team.id,
+        teamName: team.name
+      });
+    } catch (error) {
+      console.error('Error joining team with invitation:', error);
+      res.status(500).json({ message: 'Failed to join team' });
+    }
+  });
+
+  app.post('/api/auth/register-with-team', async (req, res) => {
+    const { name, email, username, password, teamId } = req.body;
+
+    if (!name || !email || !username || !password || !teamId) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    try {
+      // Check if team exists
+      const team = await storage.getTeam(teamId);
+      if (!team) {
+        return res.status(404).json({ message: 'Team not found' });
+      }
+
+      // Check if username or email already exists
+      const existingUser = await storage.getUserByUsername(username) || await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(409).json({ message: 'Username or email already exists' });
+      }
+
+      // Create user with teamId
+      const user = await storage.createUser({
+        name,
+        email,
+        username,
+        password,
+        role: 'player',
+        teamId,
+        isActive: true,
+        credits: 0
+      });
+
+      res.status(201).json({ 
+        message: 'User registered successfully',
+        userId: user.id
+      });
+    } catch (error) {
+      console.error('Error registering user with team:', error);
+      res.status(500).json({ message: 'Failed to register user' });
     }
   });
 

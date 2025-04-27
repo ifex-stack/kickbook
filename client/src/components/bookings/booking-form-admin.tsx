@@ -6,7 +6,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -31,6 +30,7 @@ interface BookingFormAdminProps {
 export function BookingFormAdmin({ onSubmit, onCancel, selectedDate = new Date() }: BookingFormAdminProps) {
   const { toast } = useToast();
   const [matchFormat, setMatchFormat] = useState<string>("7-a-side");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const defaultStartTime = new Date(selectedDate);
   defaultStartTime.setHours(18, 0, 0); // Default to 6:00 PM
@@ -68,15 +68,18 @@ export function BookingFormAdmin({ onSubmit, onCancel, selectedDate = new Date()
 
   const handleFormSubmit = async (data: BookingFormData) => {
     try {
+      setIsSubmitting(true);
       await onSubmit(data);
       reset();
     } catch (error) {
-      console.error("Error submitting form:", error);
+      console.error("Error creating booking:", error);
       toast({
         title: "Error",
         description: "Failed to create booking. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -164,8 +167,15 @@ export function BookingFormAdmin({ onSubmit, onCancel, selectedDate = new Date()
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit">
-          Create Booking
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? (
+            <>
+              <span className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+              Creating...
+            </>
+          ) : (
+            <>Create Booking</>
+          )}
         </Button>
       </div>
     </form>

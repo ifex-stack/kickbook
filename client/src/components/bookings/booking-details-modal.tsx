@@ -96,6 +96,40 @@ export function BookingDetailsModal({ isOpen, onClose, booking, onEnterStats }: 
       setIsLeaving(false);
     }
   };
+  
+  const handlePlayerJoin = async (data: PlayerBookingFormData) => {
+    if (!booking) return;
+    
+    try {
+      setIsJoining(true);
+      await apiRequest("POST", `/api/bookings/${booking.id}/players`, { 
+        playerName: data.playerName,
+        playerEmail: data.playerEmail,
+        playerPhone: data.playerPhone,
+        playerId: user?.id || null
+      });
+      
+      toast({
+        title: "Success",
+        description: "You've joined the session!",
+      });
+      
+      queryClient.invalidateQueries({ queryKey: [`/api/bookings/${booking.id}/players`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      
+      // Close the join tab and show details
+      setActiveTab("details");
+    } catch (error) {
+      console.error("Error joining session:", error);
+      toast({
+        title: "Error",
+        description: "Failed to join session. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsJoining(false);
+    }
+  };
 
   if (!booking) return null;
   

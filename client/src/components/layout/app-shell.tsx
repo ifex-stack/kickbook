@@ -10,12 +10,14 @@ import {
   Settings, 
   Menu, 
   X, 
-  LogOut 
+  LogOut, 
+  Bell 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useQuery } from "@tanstack/react-query";
 
 interface NavItem {
   title: string;
@@ -37,6 +39,24 @@ export function AppShell({ children, user }: AppShellProps) {
   const { logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   
+  // Fetch unread notifications count
+  const { data: unreadNotifications = [] } = useQuery<any[]>({
+    queryKey: ['/api/notifications/unread'],
+    enabled: !!user,
+  });
+  
+  // Create notifications icon with badge
+  const NotificationIcon = () => (
+    <div className="relative">
+      <Bell className="h-5 w-5" />
+      {unreadNotifications.length > 0 && (
+        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
+          {unreadNotifications.length > 9 ? '9+' : unreadNotifications.length}
+        </span>
+      )}
+    </div>
+  );
+
   // Navigation items for sidebar/navbar
   const navItems: NavItem[] = [
     {
@@ -64,6 +84,11 @@ export function AppShell({ children, user }: AppShellProps) {
       title: "Achievements",
       href: "/achievements",
       icon: <Award className="h-5 w-5" />,
+    },
+    {
+      title: "Notifications",
+      href: "/notifications",
+      icon: <NotificationIcon />,
     },
     {
       title: "Credits",

@@ -1179,10 +1179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Subscription management routes
   app.post("/api/get-or-create-subscription", requireAuth, async (req, res) => {
     try {
-      if (!req.isAuthenticated()) {
-        return res.status(401).json({ message: "Not authenticated" });
-      }
-
+      // Authentication is already checked by requireAuth middleware
       const user = req.user as any;
       const { priceId } = req.body;
 

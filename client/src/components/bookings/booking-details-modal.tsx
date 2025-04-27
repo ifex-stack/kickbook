@@ -3,18 +3,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTimeRange, getInitials } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Calendar, Download } from "lucide-react";
+import { Calendar, Download, Users, ListChecks } from "lucide-react";
+import { TeamSelection } from "./team-selection";
+import { Booking, User } from "@shared/schema";
 
 interface BookingDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  booking: any | null;
+  booking: Booking | null;
   onEnterStats: () => void;
 }
 
@@ -98,135 +101,163 @@ export function BookingDetailsModal({ isOpen, onClose, booking, onEnterStats }: 
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="text-lg font-heading font-medium text-gray-900 dark:text-gray-100">Session Details</DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4">
-          {/* Booking header */}
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{booking.title}</h3>
-            <p className="text-gray-500 dark:text-gray-400">{booking.location}</p>
-            <div className="mt-2 flex items-center text-sm text-gray-500 dark:text-gray-400">
-              <span className="material-icons text-sm mr-1">calendar_today</span>
-              {formatTimeRange(booking.startTime, booking.endTime)}
-            </div>
-            <div className="mt-2 flex items-center text-sm">
-              <span className={`px-2 py-1 text-xs rounded-md ${
-                booking.format === "5-a-side" 
-                  ? "bg-secondary-DEFAULT bg-opacity-10 text-secondary-DEFAULT"
-                  : booking.format === "11-a-side"
-                  ? "bg-accent-DEFAULT bg-opacity-10 text-accent-DEFAULT"
-                  : "bg-primary-DEFAULT bg-opacity-10 text-primary-DEFAULT"
-              }`}>
-                {booking.format}
-              </span>
-              <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                {booking.availableSlots} / {booking.totalSlots} slots available
-              </span>
-            </div>
-          </div>
+        <Tabs defaultValue="details" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-4">
+            <TabsTrigger value="details" className="flex items-center">
+              <ListChecks className="w-4 h-4 mr-2" />
+              Details
+            </TabsTrigger>
+            <TabsTrigger value="teams" className="flex items-center">
+              <Users className="w-4 h-4 mr-2" />
+              Team Selection
+            </TabsTrigger>
+          </TabsList>
           
-          <Separator />
-          
-          {/* Attendees */}
-          <div>
-            <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Attendees</h4>
-            {isLoading ? (
-              <div className="p-4 flex justify-center">
-                <div className="animate-spin w-6 h-6 border-4 border-primary-DEFAULT border-t-transparent rounded-full"></div>
+          <TabsContent value="details" className="space-y-4">
+            {/* Booking header */}
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{booking.title}</h3>
+              <p className="text-gray-500 dark:text-gray-400">{booking.location}</p>
+              <div className="mt-2 flex items-center text-sm text-gray-500 dark:text-gray-400">
+                <span className="material-icons text-sm mr-1">calendar_today</span>
+                {formatTimeRange(booking.startTime, booking.endTime)}
               </div>
-            ) : attendees && attendees.length > 0 ? (
-              <div className="grid grid-cols-3 gap-2">
-                {attendees.map((attendee: any) => (
-                  <Card key={attendee.id} className="p-2 flex flex-col items-center">
-                    <div className="w-10 h-10 rounded-full bg-primary-DEFAULT bg-opacity-10 text-primary-DEFAULT dark:text-primary-light flex items-center justify-center">
-                      {getInitials(attendee.playerName || "User")}
-                    </div>
-                    <p className="text-xs text-center mt-1 truncate w-full">
-                      {attendee.playerName || "User"}
-                    </p>
-                  </Card>
-                ))}
+              <div className="mt-2 flex items-center text-sm">
+                <span className={`px-2 py-1 text-xs rounded-md ${
+                  booking.format === "5-a-side" 
+                    ? "bg-secondary-DEFAULT bg-opacity-10 text-secondary-DEFAULT"
+                    : booking.format === "11-a-side"
+                    ? "bg-accent-DEFAULT bg-opacity-10 text-accent-DEFAULT"
+                    : "bg-primary-DEFAULT bg-opacity-10 text-primary-DEFAULT"
+                }`}>
+                  {booking.format}
+                </span>
+                <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+                  {booking.availableSlots} / {booking.totalSlots} slots available
+                </span>
               </div>
-            ) : (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center">No attendees yet</p>
-            )}
-          </div>
-          
-          <div className="flex justify-end">
-            <a 
-              href={`/api/calendar/download/${booking.id}`} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="inline-flex items-center text-sm text-primary-DEFAULT hover:text-primary-dark transition-colors"
-            >
-              <Calendar className="w-4 h-4 mr-1" />
-              Add to calendar
-            </a>
-          </div>
-          
-          <DialogFooter className="flex flex-col space-y-2 sm:space-y-0">
-            {!isPastBooking && (
-              isUserAttending ? (
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={handleLeaveSession}
-                  disabled={isLeaving}
-                  className="w-full sm:w-auto"
-                >
-                  {isLeaving ? (
-                    <>
-                      <span className="animate-spin mr-2 h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full"></span>
-                      Leaving...
-                    </>
-                  ) : (
-                    <>Leave Session</>
-                  )}
-                </Button>
+            </div>
+            
+            <Separator />
+            
+            {/* Attendees */}
+            <div>
+              <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Attendees</h4>
+              {isLoading ? (
+                <div className="p-4 flex justify-center">
+                  <div className="animate-spin w-6 h-6 border-4 border-primary-DEFAULT border-t-transparent rounded-full"></div>
+                </div>
+              ) : attendees && attendees.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {attendees.map((attendee: any) => (
+                    <Card key={attendee.id} className="p-2 flex flex-col items-center">
+                      <div className="w-10 h-10 rounded-full bg-primary-DEFAULT bg-opacity-10 text-primary-DEFAULT dark:text-primary-light flex items-center justify-center">
+                        {getInitials(attendee.playerName || "User")}
+                      </div>
+                      <p className="text-xs text-center mt-1 truncate w-full">
+                        {attendee.playerName || "User"}
+                      </p>
+                    </Card>
+                  ))}
+                </div>
               ) : (
-                booking.availableSlots > 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">No attendees yet</p>
+              )}
+            </div>
+            
+            <div className="flex justify-end">
+              <a 
+                href={`/api/calendar/download/${booking.id}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-sm text-primary-DEFAULT hover:text-primary-dark transition-colors"
+              >
+                <Calendar className="w-4 h-4 mr-1" />
+                Add to calendar
+              </a>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="teams">
+            {attendees && (
+              <TeamSelection 
+                booking={booking} 
+                playersRegistered={attendees.map((a: any) => ({
+                  id: a.playerId,
+                  name: a.playerName,
+                  email: a.playerEmail || 'player@example.com'
+                }))} 
+              />
+            )}
+          </TabsContent>
+          
+          <div className="mt-4">
+            <DialogFooter className="flex flex-col space-y-2 sm:space-y-0">
+              {!isPastBooking && (
+                isUserAttending ? (
                   <Button 
                     type="button" 
-                    onClick={handleJoinSession}
-                    disabled={isJoining}
+                    variant="outline" 
+                    onClick={handleLeaveSession}
+                    disabled={isLeaving}
                     className="w-full sm:w-auto"
                   >
-                    {isJoining ? (
+                    {isLeaving ? (
                       <>
-                        <span className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
-                        Joining...
+                        <span className="animate-spin mr-2 h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full"></span>
+                        Leaving...
                       </>
                     ) : (
-                      <>Join Session</>
+                      <>Leave Session</>
                     )}
                   </Button>
+                ) : (
+                  booking.availableSlots > 0 && (
+                    <Button 
+                      type="button" 
+                      onClick={handleJoinSession}
+                      disabled={isJoining}
+                      className="w-full sm:w-auto"
+                    >
+                      {isJoining ? (
+                        <>
+                          <span className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                          Joining...
+                        </>
+                      ) : (
+                        <>Join Session</>
+                      )}
+                    </Button>
+                  )
                 )
-              )
-            )}
-            
-            {isPastBooking && user?.role === "admin" && (
+              )}
+              
+              {isPastBooking && user?.role === "admin" && (
+                <Button 
+                  type="button" 
+                  onClick={onEnterStats}
+                  className="w-full sm:w-auto"
+                >
+                  Enter Match Stats
+                </Button>
+              )}
+              
               <Button 
                 type="button" 
-                onClick={onEnterStats}
+                variant="outline"
+                onClick={onClose}
                 className="w-full sm:w-auto"
               >
-                Enter Match Stats
+                Close
               </Button>
-            )}
-            
-            <Button 
-              type="button" 
-              variant="outline"
-              onClick={onClose}
-              className="w-full sm:w-auto"
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        </div>
+            </DialogFooter>
+          </div>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

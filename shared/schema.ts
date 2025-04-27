@@ -49,6 +49,8 @@ export const bookings = pgTable("bookings", {
   isRecurring: boolean("is_recurring").default(false),
   creditCost: integer("credit_cost").default(1), // Number of credits per player
   weatherData: json("weather_data"), // Store weather forecast data
+  status: text("status").notNull().default("active"), // active, canceled
+  cancelReason: text("cancel_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

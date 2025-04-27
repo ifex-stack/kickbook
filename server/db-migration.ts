@@ -29,7 +29,9 @@ export async function runMigrations() {
     await db.execute(sql`
       ALTER TABLE bookings 
       ADD COLUMN IF NOT EXISTS credit_cost INTEGER DEFAULT 1,
-      ADD COLUMN IF NOT EXISTS weather_data JSONB
+      ADD COLUMN IF NOT EXISTS weather_data JSONB,
+      ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active',
+      ADD COLUMN IF NOT EXISTS cancel_reason TEXT
     `);
     console.log("✓ Bookings table updated");
 

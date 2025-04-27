@@ -29,7 +29,7 @@ export default function BookingTest() {
     }
     
     try {
-      // Simple test booking with minimum fields
+      // Make sure the object schema exactly matches what's expected
       const testBooking = {
         title: "Test Booking",
         location: "Test Location",
@@ -40,10 +40,7 @@ export default function BookingTest() {
         availableSlots: 14,
         teamId: user.teamId,
         status: "active",
-        isRecurring: false,
-        creditCost: 1,
-        weatherData: null,
-        cancelReason: null
+        isRecurring: false
       };
       
       console.log("Sending test booking:", testBooking);

@@ -51,6 +51,7 @@ export function CreateBookingModal({ isOpen, onClose, selectedDate = new Date() 
         throw new Error("User not associated with a team");
       }
       
+      // Only include fields that are defined in the schema
       const bookingData = {
         ...data,
         startTime: new Date(data.startTime).toISOString(),
@@ -58,9 +59,7 @@ export function CreateBookingModal({ isOpen, onClose, selectedDate = new Date() 
         availableSlots: data.totalSlots,
         status: "active", // Set the initial status as active
         teamId: userData.teamId,
-        creditCost: 1, // Default credit cost
-        cancelReason: null,
-        weatherData: null
+        isRecurring: data.isRecurring || false
       };
       
       console.log("Sending booking data:", bookingData);

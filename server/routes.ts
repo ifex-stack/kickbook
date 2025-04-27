@@ -2103,6 +2103,194 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Calendar Integration API
+  app.get("/api/calendar/auth/google", requireAuth, async (req, res) => {
+    try {
+      if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+        return res.status(400).json({ 
+          message: "Google Calendar integration is not configured",
+          missingKeys: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
+        });
+      }
+      
+      const authUrl = calendarService.getGoogleAuthUrl();
+      res.json({ authUrl });
+    } catch (error: any) {
+      console.error("Google Calendar auth error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/calendar/google/callback", async (req, res) => {
+    const code = req.query.code as string;
+    const state = req.query.state as string;
+    
+    if (!code) {
+      return res.status(400).send("Missing authorization code");
+    }
+    
+    if (!req.isAuthenticated()) {
+      // If user isn't authenticated, redirect to login with return URL
+      return res.redirect(`/login?returnUrl=/api/calendar/google/callback?code=${code}`);
+    }
+    
+    try {
+      const user = req.user as any;
+      
+      // Get tokens from Google
+      const { accessToken, refreshToken, expiresAt } = await calendarService.getGoogleTokens(code);
+      
+      // Check if user already has a Google Calendar integration
+      const existingIntegration = await storage.getCalendarIntegrationByUser(user.id, "google");
+      
+      if (existingIntegration) {
+        // Update existing integration
+        await storage.updateCalendarIntegration(existingIntegration.id, {
+          accessToken,
+          refreshToken: refreshToken || existingIntegration.refreshToken,
+          expiresAt,
+          isActive: true
+        });
+      } else {
+        // Create new integration
+        await storage.createCalendarIntegration({
+          userId: user.id,
+          provider: "google",
+          accessToken,
+          refreshToken,
+          expiresAt,
+          isActive: true
+        });
+      }
+      
+      // Redirect to calendar settings page
+      res.redirect("/settings?tab=calendar&status=success");
+    } catch (error: any) {
+      console.error("Google Calendar callback error:", error);
+      res.redirect("/settings?tab=calendar&status=error&message=" + encodeURIComponent(error.message));
+    }
+  });
+  
+  app.post("/api/calendar/sync", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { provider = "google" } = req.body;
+      
+      // Check if integration exists
+      const integration = await storage.getCalendarIntegrationByUser(user.id, provider);
+      
+      if (!integration) {
+        return res.status(404).json({ 
+          message: `No ${provider} calendar integration found`,
+          action: "connect" 
+        });
+      }
+      
+      if (!integration.isActive) {
+        return res.status(400).json({ 
+          message: "Calendar integration is not active",
+          action: "reconnect" 
+        });
+      }
+      
+      // Sync calendar events
+      const syncedCount = await calendarService.syncUserCalendar(user.id, provider);
+      
+      res.json({ 
+        message: `Successfully synced ${syncedCount} events to your calendar`,
+        syncedCount 
+      });
+    } catch (error: any) {
+      console.error("Calendar sync error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/calendar/integrations", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      
+      // Get all integrations for user
+      const googleIntegration = await storage.getCalendarIntegrationByUser(user.id, "google");
+      
+      const integrations = {
+        google: googleIntegration ? {
+          connected: true,
+          isActive: googleIntegration.isActive,
+          lastSynced: googleIntegration.lastSyncedAt
+        } : {
+          connected: false
+        }
+        // Add other providers here as needed (e.g., apple, outlook)
+      };
+      
+      res.json(integrations);
+    } catch (error: any) {
+      console.error("Get calendar integrations error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.delete("/api/calendar/integrations/:provider", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { provider } = req.params;
+      
+      // Check if integration exists
+      const integration = await storage.getCalendarIntegrationByUser(user.id, provider);
+      
+      if (!integration) {
+        return res.status(404).json({ message: `No ${provider} calendar integration found` });
+      }
+      
+      // Soft delete by setting isActive to false
+      await storage.updateCalendarIntegration(integration.id, {
+        isActive: false
+      });
+      
+      res.json({ message: `${provider} calendar integration disabled` });
+    } catch (error: any) {
+      console.error("Delete calendar integration error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/calendar/download/:bookingId", requireAuth, async (req, res) => {
+    try {
+      const bookingId = parseInt(req.params.bookingId);
+      const booking = await storage.getBooking(bookingId);
+      
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      const user = req.user as any;
+      
+      // Check if user has access to this booking
+      if (user.teamId !== booking.teamId) {
+        return res.status(403).json({ message: "Not authorized to access this booking" });
+      }
+      
+      const team = await storage.getTeam(booking.teamId);
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      
+      // Generate iCal file
+      const icalString = calendarService.generateICalEvent(booking, team);
+      
+      // Set response headers
+      res.setHeader('Content-Type', 'text/calendar');
+      res.setHeader('Content-Disposition', `attachment; filename="booking-${bookingId}.ics"`);
+      
+      // Send the iCal file
+      res.send(icalString);
+    } catch (error: any) {
+      console.error("Download calendar event error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
   const httpServer = createServer(app);
   return httpServer;
 }

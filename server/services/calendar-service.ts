@@ -417,7 +417,7 @@ export class CalendarService {
       description: `${booking.format} match for team ${team.name}`,
       location: booking.location,
       url: `${process.env.APP_URL || 'http://localhost:5000'}/bookings?id=${booking.id}`,
-      status: booking.status === 'canceled' ? 'CANCELLED' : 'CONFIRMED',
+      status: booking.status === 'canceled' ? 'CANCELLED' : 'CONFIRMED' as any,
       organizer: {
         name: 'Football Team Manager',
         email: 'noreply@footballteammanager.com'

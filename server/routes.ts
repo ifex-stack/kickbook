@@ -399,16 +399,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/bookings", requireAdmin, async (req, res) => {
     try {
       console.log("Received booking data:", JSON.stringify(req.body, null, 2));
+      
+      // Pre-process the dates in the request body
+      // Convert ISO strings to Date objects before validation
+      const processedData = {
+        ...req.body,
+        startTime: req.body.startTime ? new Date(req.body.startTime) : undefined,
+        endTime: req.body.endTime ? new Date(req.body.endTime) : undefined
+      };
+      
+      console.log("Pre-processed booking data:", processedData);
       console.log("Required schema:", insertBookingSchema);
       
-      const parseResult = insertBookingSchema.safeParse(req.body);
+      const parseResult = insertBookingSchema.safeParse(processedData);
       
       if (!parseResult.success) {
         console.error("Validation error details:", parseResult.error.errors);
         return res.status(400).json({ 
           message: "Invalid booking data", 
           errors: parseResult.error.errors,
-          receivedData: req.body
+          receivedData: processedData
         });
       }
       

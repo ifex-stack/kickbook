@@ -29,13 +29,14 @@ export default function BookingTest() {
     }
     
     try {
-      // Make sure the object schema exactly matches what's expected
+      // Make sure we include only required fields in the expected format
       const testBooking = {
         title: "Test Booking",
         location: "Test Location",
         format: "7-a-side",
-        startTime: new Date(), // Send as Date object, not string
-        endTime: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours later
+        // Using ISO strings is fine now, server will convert them
+        startTime: new Date().toISOString(),
+        endTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2 hours later
         totalSlots: 14,
         availableSlots: 14,
         teamId: user.teamId,
